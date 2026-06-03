@@ -274,7 +274,7 @@ try {
   assertEqual(200, safetyLocateResponse.status, "safetyLocate.response.status");
   assertEqual(false, safetyLocateJson.ok, "safetyLocate.ok");
 
-  console.log("worker visual reticle pointing: ok");
+  console.log("worker pointing: ok");
 } finally {
   globalThis.fetch = originalFetch;
 }

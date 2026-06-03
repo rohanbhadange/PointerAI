@@ -114,6 +114,7 @@ async function locateWithOpenAIComputerUse({
 
   const model = env.OPENAI_COMPUTER_MODEL || OPENAI_COMPUTER_MODEL;
   const prompt = buildOpenAIComputerPrompt(goal, width, height);
+  // Send the screenshot up front so the usual locate path can finish in one model call.
   const firstResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {

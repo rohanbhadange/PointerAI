@@ -324,6 +324,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         string spokenText;
         if (isPointingRequest)
         {
+            // Pointing turns use /locate as the authoritative coordinate source.
             AppLogger.Info("Skipping /chat for pointing request; locator is authoritative.");
             spokenText = "";
         }
