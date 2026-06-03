@@ -204,8 +204,8 @@ public sealed class OverlayWindow : Window
         }
 
         cursorPosition = new WpfPoint(
-            (cursor.X - screenBounds.Left) / dpiScaleX + 4,
-            (cursor.Y - screenBounds.Top) / dpiScaleY + 3);
+            (cursor.X - screenBounds.Left) / dpiScaleX + 10,
+            (cursor.Y - screenBounds.Top) / dpiScaleY + 8);
         PositionVisuals();
         UpdateVisualState();
     }

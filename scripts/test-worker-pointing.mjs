@@ -222,10 +222,14 @@ try {
   assertEqual(1, locateJson.screenNumber, "locate.screenNumber");
   assertEqual("screenshot_pixels_top_left", locateJson.coordinateSpace, "locate.coordinateSpace");
 
-  const locateText = capturedOpenAIComputerRequests[0]?.input || "";
+  const locateContent = capturedOpenAIComputerRequests[0]?.input?.[0]?.content || [];
+  const locateText = locateContent.find((item) => item.type === "input_text")?.text || "";
+  const locateImage = locateContent.find((item) => item.type === "input_image");
   assertIncludes(locateText, "screenshot is exactly 1536 pixels wide and 960 pixels tall", "locate prompt");
   assertIncludes(locateText, "click the visual center", "locate prompt");
   assertEqual("computer", capturedOpenAIComputerRequests[0]?.tools?.[0]?.type, "locate.tool.type");
+  assertEqual("original", locateImage?.detail, "locate.image.detail");
+  assertEqual("data:image/png;base64,aGVsbG8=", locateImage?.image_url, "locate.image.url");
 
   const screenshotLocateResponse = await worker.fetch(new Request("https://example.test/locate", {
     method: "POST",

@@ -123,7 +123,19 @@ async function locateWithOpenAIComputerUse({
     body: JSON.stringify({
       model,
       tools: [{ type: "computer" }],
-      input: prompt,
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            {
+              type: "input_image",
+              image_url: `data:${mimeType};base64,${screenshotBase64}`,
+              detail: "original",
+            },
+          ],
+        },
+      ],
     }),
   });
 
