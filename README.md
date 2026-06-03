@@ -1,4 +1,4 @@
-# ClickyClone
+# PointerAI
 
 Windows desktop clone of Clicky. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sends screen context to a Cloudflare Worker, speaks responses with ElevenLabs, and shows a blue cursor overlay that can point at UI elements.
 
