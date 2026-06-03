@@ -12,7 +12,8 @@ public sealed record ChatPoint(
     int? ScreenNumber,
     string? Source = null,
     ChatBounds? Bounds = null,
-    string? ElementId = null);
+    string? ElementId = null,
+    string? TargetId = null);
 
 public sealed record ChatBounds(
     double X,

@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Diagnostics;
 using System.IO;
@@ -14,6 +15,10 @@ public sealed class ScreenCaptureService
 {
     private static readonly TimeSpan AccessibleElementBudget = TimeSpan.FromMilliseconds(450);
     private const int AccessibleElementLimit = 80;
+    private const int VisualTargetLimit = 54;
+    private const int VisualTargetTileWidth = 96;
+    private const int VisualTargetTileHeight = 72;
+    private const int VisualTargetMinSpacing = 52;
 
     public Task<IReadOnlyList<ScreenCapturePayload>> CaptureAllScreensAsync(CancellationToken cancellationToken)
     {
@@ -56,10 +61,17 @@ public sealed class ScreenCaptureService
                 bitmap.Save(memoryStream, ImageFormat.Png);
                 AppLogger.Info($"PERF stage=screenshot_pixels screen={index + 1} ms={screenStopwatch.ElapsedMilliseconds}");
 
-                var elementStopwatch = Stopwatch.StartNew();
-                var elements = CaptureAccessibleElements(bounds, index + 1, cursorPosition, AccessibleElementBudget);
-                LogAccessibleElementDiagnostic(index + 1, bounds, elements, elementStopwatch.Elapsed);
-                AppLogger.Info($"PERF stage=uia_catalog screen={index + 1} ms={elementStopwatch.ElapsedMilliseconds} elements={elements.Count}");
+                var atlasStopwatch = Stopwatch.StartNew();
+                var visualTargets = GenerateVisualTargets(bitmap, index + 1);
+                using var visualAtlasStream = new MemoryStream();
+                using (var atlasBitmap = new Bitmap(bitmap))
+                using (var atlasGraphics = Graphics.FromImage(atlasBitmap))
+                {
+                    DrawVisualAtlas(atlasGraphics, visualTargets);
+                    atlasBitmap.Save(visualAtlasStream, ImageFormat.Png);
+                }
+                LogVisualAtlasDiagnostic(index + 1, bounds, visualTargets, atlasStopwatch.Elapsed);
+                AppLogger.Info($"PERF stage=visual_atlas screen={index + 1} ms={atlasStopwatch.ElapsedMilliseconds} targets={visualTargets.Count}");
 
                 var screenNumber = index + 1;
                 var label = screens.Length == 1
@@ -72,6 +84,7 @@ public sealed class ScreenCaptureService
                     label,
                     "image/png",
                     Convert.ToBase64String(memoryStream.ToArray()),
+                    Convert.ToBase64String(visualAtlasStream.ToArray()),
                     null,
                     isCursorScreen,
                     screenNumber,
@@ -87,7 +100,8 @@ public sealed class ScreenCaptureService
                     bounds.Top / dpiScale.Y,
                     bounds.Width / dpiScale.X,
                     bounds.Height / dpiScale.Y,
-                    elements));
+                    visualTargets,
+                    []));
             }
 
             AppLogger.Info($"PERF stage=screenshot_total ms={captureStopwatch.ElapsedMilliseconds} screens={captures.Count}");
@@ -127,6 +141,162 @@ public sealed class ScreenCaptureService
                 DrawGuideLabel(graphics, $"y={y}", 4, y + 2, font, textBrush, textBackBrush);
                 DrawGuideLabel(graphics, $"y={y}", Math.Max(4, width - 58), y + 2, font, textBrush, textBackBrush);
             }
+        }
+    }
+
+    private static IReadOnlyList<VisualTargetPayload> GenerateVisualTargets(Bitmap bitmap, int screenNumber)
+    {
+        var candidates = new List<(VisualTargetPayload Target, double Score)>();
+        var tileWidth = Math.Min(VisualTargetTileWidth, Math.Max(48, bitmap.Width / 10));
+        var tileHeight = Math.Min(VisualTargetTileHeight, Math.Max(42, bitmap.Height / 12));
+
+        for (var y = 0; y < bitmap.Height; y += tileHeight)
+        {
+            for (var x = 0; x < bitmap.Width; x += tileWidth)
+            {
+                var width = Math.Min(tileWidth, bitmap.Width - x);
+                var height = Math.Min(tileHeight, bitmap.Height - y);
+                if (width < 24 || height < 24)
+                {
+                    continue;
+                }
+
+                var score = EstimateVisualInterest(bitmap, x, y, width, height);
+                if (score < 0.12)
+                {
+                    continue;
+                }
+
+                var kind = width * height > 18_000 ? "R" : "C";
+                var target = new VisualTargetPayload(
+                    "",
+                    kind == "R" ? "region" : "visual-candidate",
+                    x,
+                    y,
+                    width,
+                    height,
+                    x + width / 2.0,
+                    y + height / 2.0,
+                    Math.Round(score, 3),
+                    null);
+                candidates.Add((target, score));
+            }
+        }
+
+        var selected = new List<VisualTargetPayload>();
+        foreach (var candidate in candidates.OrderByDescending(candidate => candidate.Score))
+        {
+            if (selected.Count >= VisualTargetLimit)
+            {
+                break;
+            }
+
+            if (!IsFarEnoughFromSelected(candidate.Target, selected))
+            {
+                continue;
+            }
+
+            selected.Add(candidate.Target);
+        }
+
+        return selected
+            .Select((target, index) => target with
+            {
+                Id = $"{(target.Kind == "region" ? "R" : "C")}{index + 1:00}"
+            })
+            .OrderBy(target => target.Y)
+            .ThenBy(target => target.X)
+            .ToArray();
+    }
+
+    private static bool IsFarEnoughFromSelected(
+        VisualTargetPayload target,
+        IEnumerable<VisualTargetPayload> selectedTargets)
+    {
+        foreach (var selected in selectedTargets)
+        {
+            var dx = target.CenterX - selected.CenterX;
+            var dy = target.CenterY - selected.CenterY;
+            if (Math.Sqrt(dx * dx + dy * dy) < VisualTargetMinSpacing)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static double EstimateVisualInterest(Bitmap bitmap, int x, int y, int width, int height)
+    {
+        var edgeCount = 0;
+        var samples = 0;
+        var colorfulness = 0.0;
+        const int step = 6;
+
+        for (var sampleY = y; sampleY < y + height - step; sampleY += step)
+        {
+            for (var sampleX = x; sampleX < x + width - step; sampleX += step)
+            {
+                var current = bitmap.GetPixel(sampleX, sampleY);
+                var right = bitmap.GetPixel(sampleX + step, sampleY);
+                var down = bitmap.GetPixel(sampleX, sampleY + step);
+                var luma = Luma(current);
+                var rightDelta = Math.Abs(luma - Luma(right));
+                var downDelta = Math.Abs(luma - Luma(down));
+                if (rightDelta > 32 || downDelta > 32)
+                {
+                    edgeCount++;
+                }
+
+                colorfulness += Math.Abs(current.R - current.G) + Math.Abs(current.G - current.B) + Math.Abs(current.B - current.R);
+                samples++;
+            }
+        }
+
+        if (samples == 0)
+        {
+            return 0;
+        }
+
+        var edgeDensity = edgeCount / (double)samples;
+        var colorScore = Math.Min(1, colorfulness / samples / 180.0);
+        return edgeDensity * 0.8 + colorScore * 0.2;
+    }
+
+    private static int Luma(Color color)
+    {
+        return (int)(0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B);
+    }
+
+    private static void DrawVisualAtlas(Graphics graphics, IReadOnlyList<VisualTargetPayload> targets)
+    {
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var ringPen = new Pen(Color.FromArgb(235, 0, 210, 255), 3);
+        using var regionPen = new Pen(Color.FromArgb(220, 255, 190, 0), 2);
+        using var leaderPen = new Pen(Color.FromArgb(210, 0, 210, 255), 1);
+        using var labelFont = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var labelBrush = new SolidBrush(Color.White);
+        using var labelBackBrush = new SolidBrush(Color.FromArgb(230, 0, 0, 0));
+
+        foreach (var target in targets)
+        {
+            var centerX = (float)target.CenterX;
+            var centerY = (float)target.CenterY;
+            var isRegion = string.Equals(target.Kind, "region", StringComparison.OrdinalIgnoreCase);
+            if (isRegion)
+            {
+                graphics.DrawRectangle(regionPen, (float)target.X, (float)target.Y, (float)target.Width, (float)target.Height);
+            }
+
+            graphics.DrawEllipse(ringPen, centerX - 7, centerY - 7, 14, 14);
+            graphics.DrawLine(leaderPen, centerX + 8, centerY - 8, centerX + 30, centerY - 22);
+
+            var label = target.Id;
+            var labelSize = graphics.MeasureString(label, labelFont);
+            var labelX = Math.Min(Math.Max(2, centerX + 30), graphics.VisibleClipBounds.Width - labelSize.Width - 4);
+            var labelY = Math.Min(Math.Max(2, centerY - 32), graphics.VisibleClipBounds.Height - labelSize.Height - 4);
+            graphics.FillRectangle(labelBackBrush, labelX - 2, labelY - 1, labelSize.Width + 4, labelSize.Height + 2);
+            graphics.DrawString(label, labelFont, labelBrush, labelX, labelY);
         }
     }
 
@@ -460,23 +630,22 @@ public sealed class ScreenCaptureService
         }
     }
 
-    private static void LogAccessibleElementDiagnostic(
+    private static void LogVisualAtlasDiagnostic(
         int screenNumber,
         Rectangle bounds,
-        IReadOnlyList<ScreenElementPayload> elements,
+        IReadOnlyList<VisualTargetPayload> targets,
         TimeSpan elapsed)
     {
         AppLogger.Info(
-            $"UIA diagnostic. Screen={screenNumber} Bounds={bounds} Count={elements.Count} " +
+            $"Visual atlas diagnostic. Screen={screenNumber} Bounds={bounds} Count={targets.Count} " +
             $"BudgetMs={AccessibleElementBudget.TotalMilliseconds:0} ElapsedMs={elapsed.TotalMilliseconds:0}");
 
-        foreach (var element in elements.Take(12))
+        foreach (var target in targets.Take(12))
         {
             AppLogger.Info(
-                $"UIA candidate. Screen={screenNumber} Id={element.Id} Name=\"{element.Name}\" Type={element.ControlType} " +
-                $"Window=\"{element.WindowTitle ?? ""}\" Clickable={element.IsClickable} " +
-                $"Bounds={element.X:0.0},{element.Y:0.0},{element.Width:0.0},{element.Height:0.0} " +
-                $"Center={element.CenterX:0.0},{element.CenterY:0.0} Score={element.Score:0.0}");
+                $"Visual target. Screen={screenNumber} Id={target.Id} Kind={target.Kind} " +
+                $"Bounds={target.X:0.0},{target.Y:0.0},{target.Width:0.0},{target.Height:0.0} " +
+                $"Center={target.CenterX:0.0},{target.CenterY:0.0} Confidence={target.Confidence:0.000}");
         }
     }
 

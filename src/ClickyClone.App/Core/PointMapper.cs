@@ -21,6 +21,12 @@ public static class PointMapper
             return TryMapElementPoint(chatPoint.ElementId, captures, out pointTarget);
         }
 
+        if (string.Equals(chatPoint.Source, "visual-target", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(chatPoint.TargetId))
+        {
+            return TryMapVisualTarget(chatPoint.TargetId, captures, out pointTarget);
+        }
+
         var targetCapture = chatPoint.ScreenNumber is int screenNumber
             ? captures.FirstOrDefault(capture => capture.ScreenNumber == screenNumber)
             : captures.FirstOrDefault(capture => capture.IsCursorScreen);
@@ -69,6 +75,36 @@ public static class PointMapper
             pointTarget = new PointTarget(
                 center,
                 element.Name,
+                capture.ScreenNumber,
+                bounds);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryMapVisualTarget(
+        string targetId,
+        IReadOnlyList<ScreenCapturePayload> captures,
+        out PointTarget pointTarget)
+    {
+        pointTarget = new PointTarget(new WpfPoint(), null, null);
+        foreach (var capture in captures)
+        {
+            var target = capture.VisualTargets?.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, targetId, StringComparison.OrdinalIgnoreCase));
+            if (target is null)
+            {
+                continue;
+            }
+
+            var center = MapScreenshotPoint(target.CenterX, target.CenterY, capture);
+            var bounds = MapScreenshotBounds(
+                new ChatBounds(target.X, target.Y, target.Width, target.Height),
+                capture);
+            pointTarget = new PointTarget(
+                center,
+                target.LabelHint ?? target.Id,
                 capture.ScreenNumber,
                 bounds);
             return true;

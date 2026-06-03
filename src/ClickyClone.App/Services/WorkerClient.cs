@@ -81,8 +81,8 @@ public sealed class WorkerClient
         CancellationToken cancellationToken)
     {
         AppLogger.Info($"Worker /chat request started. TranscriptLength={transcript.Length} Images={images.Count} History={conversationHistory.Count}");
-        var elementCount = images.Sum(image => image.Elements?.Count ?? 0);
-        AppLogger.Info($"Worker /chat payload plan. Mode=uia-only Elements={elementCount}");
+        var visualTargetCount = images.Sum(image => image.VisualTargets?.Count ?? 0);
+        AppLogger.Info($"Worker /chat payload plan. Mode=visual-reticle Targets={visualTargetCount}");
         var payload = new
         {
             transcript,
@@ -90,25 +90,25 @@ public sealed class WorkerClient
             {
                 label = image.Label,
                 mediaType = image.MediaType,
+                data = image.Base64Data,
+                visualAtlasData = image.VisualAtlasBase64Data,
                 screenNumber = image.ScreenNumber,
                 screenshotWidthInPixels = image.ScreenshotWidthInPixels,
                 screenshotHeightInPixels = image.ScreenshotHeightInPixels,
                 displayWidthInPixels = image.DisplayWidthInPixels,
                 displayHeightInPixels = image.DisplayHeightInPixels,
-                elements = (image.Elements ?? []).Select(element => new
+                visualTargets = (image.VisualTargets ?? []).Select(target => new
                 {
-                    id = element.Id,
-                    name = element.Name,
-                    controlType = element.ControlType,
-                    x = element.X,
-                    y = element.Y,
-                    width = element.Width,
-                    height = element.Height,
-                    centerX = element.CenterX,
-                    centerY = element.CenterY,
-                    windowTitle = element.WindowTitle,
-                    isClickable = element.IsClickable,
-                    score = element.Score
+                    id = target.Id,
+                    kind = target.Kind,
+                    x = target.X,
+                    y = target.Y,
+                    width = target.Width,
+                    height = target.Height,
+                    centerX = target.CenterX,
+                    centerY = target.CenterY,
+                    confidence = target.Confidence,
+                    labelHint = target.LabelHint
                 })
             }),
             conversationHistory = conversationHistory.Select(turn => new

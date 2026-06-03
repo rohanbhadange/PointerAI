@@ -9,6 +9,7 @@ Run("maps physical pixels under dpi metadata", MapsPhysicalPixelsUnderDpiMetadat
 Run("maps exact element center on explicit scaled secondary screen", MapsExactElementCenterOnExplicitScaledSecondaryScreen);
 Run("maps target bounds with point center", MapsTargetBoundsWithPointCenter);
 Run("maps selected UIA element by local id", MapsSelectedUiaElementByLocalId);
+Run("maps selected visual target by local id", MapsSelectedVisualTargetByLocalId);
 await RunAsync("captures screenshot and accessibility catalog", CaptureSmoke.RunAsync);
 
 Console.WriteLine("All local simulation tests passed.");
@@ -70,6 +71,7 @@ static void MapsPhysicalPixelsUnderDpiMetadata()
             "image/png",
             "",
             null,
+            null,
             true,
             1,
             2560,
@@ -100,6 +102,7 @@ static void MapsExactElementCenterOnExplicitScaledSecondaryScreen()
             "image/png",
             "",
             null,
+            null,
             false,
             1,
             1920,
@@ -112,6 +115,7 @@ static void MapsExactElementCenterOnExplicitScaledSecondaryScreen()
             "screen 2",
             "image/png",
             "",
+            null,
             null,
             true,
             2,
@@ -167,6 +171,7 @@ static void MapsSelectedUiaElementByLocalId()
             "image/png",
             "",
             null,
+            null,
             true,
             1,
             1000,
@@ -175,6 +180,20 @@ static void MapsSelectedUiaElementByLocalId()
             400,
             10,
             20,
+            VisualTargets:
+            [
+                new VisualTargetPayload(
+                    "C07",
+                    "visual-candidate",
+                    100,
+                    80,
+                    50,
+                    40,
+                    125,
+                    100,
+                    0.9,
+                    "Solve")
+            ],
             Elements:
             [
                 new ScreenElementPayload(
@@ -209,6 +228,56 @@ static void MapsSelectedUiaElementByLocalId()
     AssertEqual(80, bounds.Height, "bounds.height");
 }
 
+static void MapsSelectedVisualTargetByLocalId()
+{
+    var captures = new[]
+    {
+        new ScreenCapturePayload(
+            "screen 1",
+            "image/png",
+            "",
+            null,
+            null,
+            true,
+            1,
+            1000,
+            800,
+            500,
+            400,
+            10,
+            20,
+            VisualTargets:
+            [
+                new VisualTargetPayload(
+                    "C07",
+                    "visual-candidate",
+                    100,
+                    80,
+                    50,
+                    40,
+                    125,
+                    100,
+                    0.9,
+                    "Solve")
+            ])
+    };
+
+    Assert(PointMapper.TryMapPoint(
+        new ChatPoint(999, 999, "Wrong coordinate", 1, "visual-target", null, null, "C07"),
+        captures,
+        out var target));
+
+    AssertEqual(260, target.DesktopPoint.X, "x");
+    AssertEqual(220, target.DesktopPoint.Y, "y");
+    AssertStringEqual("Solve", target.Label ?? "", "label");
+    Assert(target.DesktopBounds is not null);
+    var bounds = target.DesktopBounds.GetValueOrDefault();
+    AssertEqual(210, bounds.Left, "bounds.left");
+    AssertEqual(180, bounds.Top, "bounds.top");
+    AssertEqual(100, bounds.Width, "bounds.width");
+    AssertEqual(80, bounds.Height, "bounds.height");
+}
+
 
 static ScreenCapturePayload Capture(
     int screenNumber,
@@ -224,6 +293,7 @@ static ScreenCapturePayload Capture(
         $"screen {screenNumber}",
         "image/jpeg",
         "",
+        null,
         null,
         isCursorScreen,
         screenNumber,

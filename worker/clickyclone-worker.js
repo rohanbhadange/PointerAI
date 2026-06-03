@@ -138,11 +138,10 @@ async function handleTranscribe(request, env) {
 function handlePointingSelfTest() {
   const images = [
     {
-      elements: [
+      visualTargets: [
         {
-          id: "screen1-el42",
-          name: "New tab",
-          controlType: "Button",
+          id: "C01",
+          kind: "visual-candidate",
           x: 307.5,
           y: 8.25,
           width: 28,
@@ -153,12 +152,12 @@ function handlePointingSelfTest() {
       ],
     },
   ];
-  const parsed = parsePointTag("Self-test response. [POINT-ELEMENT:screen1-el42]", buildElementLookup(images));
+  const parsed = parseTargetSelection('{"spokenText":"Self-test response.","targetId":"C01","needsZoom":false}', buildVisualTargetLookup(images));
   return jsonResponse({
-    ok: parsed.point?.source === "element" &&
+    ok: parsed.point?.source === "visual-target" &&
       parsed.point?.x === 321.5 &&
       parsed.point?.y === 22.25 &&
-      parsed.point?.screenNumber === 1,
+      parsed.point?.screenNumber === null,
     spokenText: parsed.spokenText,
     point: parsed.point,
   });
@@ -170,7 +169,7 @@ async function handleChat(request, env) {
   const body = await request.json();
   const transcript = String(body.transcript || "").trim();
   const images = Array.isArray(body.images) ? body.images : [];
-  const elementLookup = buildElementLookup(images);
+  const targetLookup = buildVisualTargetLookup(images);
   const conversationHistory = Array.isArray(body.conversationHistory) ? body.conversationHistory : [];
 
   if (!transcript) {
@@ -190,15 +189,41 @@ async function handleChat(request, env) {
   const currentContent = /** @type {Array<Record<string, unknown>>} */ ([
     {
       type: "input_text",
-      text: `${SYSTEM_PROMPT}\n\nRecent conversation:\n${historyText || "none"}\n\nThe user said:\n${transcript}\n\nVisible UIA candidate controls:\n${formatElementCatalog(images, transcript) || "none"}\n\nChoose exactly one candidate id when a listed control clearly matches the user's request. End with exactly one point tag.`,
+      text: `${SYSTEM_PROMPT}\n\nRecent conversation:\n${historyText || "none"}\n\nThe user said:\n${transcript}\n\nVisible reticle targets:\n${formatVisualTargetManifest(images) || "none"}\n\nReturn only valid JSON matching the requested schema.`,
     },
   ]);
 
   for (const image of images) {
-    currentContent.push({ type: "input_text", text: String(image.label || "user screen") });
+    if (image.data) {
+      currentContent.push({
+        type: "input_image",
+        image_url: `data:${image.mediaType || "image/png"};base64,${image.data}`,
+        detail: "high",
+      });
+      currentContent.push({ type: "input_text", text: `${String(image.label || "user screen")} clean screenshot` });
+    }
+
+    if (image.visualAtlasData) {
+      currentContent.push({
+        type: "input_image",
+        image_url: `data:${image.mediaType || "image/png"};base64,${image.visualAtlasData}`,
+        detail: "high",
+      });
+      currentContent.push({ type: "input_text", text: `${String(image.label || "user screen")} annotated reticle atlas. Choose one visible marker id from this image.` });
+    }
   }
 
   input.push({ role: "user", content: currentContent });
+
+  const model = env.OPENAI_MODEL || OPENAI_MODEL;
+  const openAIRequest = {
+    model,
+    input,
+    max_output_tokens: 4096,
+  };
+  if (/^gpt-5/i.test(model)) {
+    openAIRequest.reasoning = { effort: "low" };
+  }
 
   const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -206,11 +231,7 @@ async function handleChat(request, env) {
       authorization: `Bearer ${env.OPENAI_API_KEY}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL || OPENAI_MODEL,
-      input,
-      max_output_tokens: 700,
-    }),
+    body: JSON.stringify(openAIRequest),
   });
 
   const responseText = await openAIResponse.text();
@@ -219,12 +240,12 @@ async function handleChat(request, env) {
   }
 
   const fullText = extractOpenAIText(safeParseJSON(responseText)).trim();
-  const point = parsePointTag(fullText, elementLookup);
+  const point = parseTargetSelection(fullText, targetLookup);
   return jsonResponse({
-    text: fullText,
+    text: point.spokenText,
     spokenText: point.spokenText.trim(),
     point: point.point,
-    model: env.OPENAI_MODEL || OPENAI_MODEL,
+    model,
   });
 }
 
@@ -291,26 +312,23 @@ you are clicky, a friendly always-on windows desktop companion. the user speaks 
 
 rules:
 - default to one or two sentences. be direct and useful.
-- write for speech. no markdown, no bullets, no code blocks.
-- if the user's request is to find a visible software control, select only from the provided UI Automation candidate controls.
-- if no listed candidate clearly matches the requested control, say you could not find a reliable matching control and end with [POINT:none].
-- if the user's question is not about finding a screen control, answer directly and end with [POINT:none].
+- write spokenText for speech. no markdown, no bullets, no code blocks.
+- if the user's request is to find a visible thing, choose only from the visible reticle marker ids in the annotated image.
+- if no marker clearly matches the requested thing, set targetId to null.
+- if the user's question is not about finding a screen target, answer directly and set targetId to null.
 - do not read code verbatim. explain what it does or what to change.
 - never say "simply" or "just".
-- all responses must end with exactly one point tag.
+- never mention marker ids, screen ids, coordinates, JSON, or targeting syntax in spokenText.
 
-UI Automation pointing:
-- the candidate list contains real controls detected locally by Windows UI Automation.
-- choose the exact candidate whose name, type, and window context best match the user's words.
-- never invent coordinates.
-- never use BOX tags.
-- never use raw POINT x,y tags.
-- when there is a clear match, end with [POINT-ELEMENT:elementId].
-- when there is no clear match, end with [POINT:none].
+reticle targeting:
+- choose the visible marker whose ring is on or closest to the requested target.
+- prefer C markers for controls and R markers for large rendered regions.
+- never invent marker ids.
+- never return coordinates.
+- never return bounding boxes.
 
-point tag format:
-[POINT-ELEMENT:screenN-elM]
-[POINT:none]
+response schema:
+{"spokenText":"short user-facing response","targetId":"C01 or R02 or null","needsZoom":false}
 `.trim();
 
 function extractOpenAIText(responseJSON) {
@@ -331,60 +349,55 @@ function extractOpenAIText(responseJSON) {
   return chunks.join("");
 }
 
-function parsePointTag(text, elementLookup = new Map()) {
-  const elementMatch = text.match(/\[POINT-ELEMENT:\s*([a-zA-Z0-9_-]+)\s*\]\s*$/);
-  if (elementMatch) {
-    const spokenText = text.slice(0, elementMatch.index).trim();
-    const element = elementLookup.get(elementMatch[1]);
-    if (!element) {
-      return { spokenText, point: null };
-    }
-
-    return {
-      spokenText,
-      point: {
-        x: element.x,
-        y: element.y,
-        label: element.label,
-        screenNumber: element.screenNumber,
-        source: "element",
-        bounds: element.bounds,
-        elementId: element.id,
-      },
-    };
+function parseTargetSelection(text, targetLookup = new Map()) {
+  const parsed = safeParseJSON(extractJsonObject(text));
+  const spokenText = sanitizeSpokenText(String(parsed?.spokenText || ""));
+  const targetId = typeof parsed?.targetId === "string" ? parsed.targetId.trim() : null;
+  if (!targetId) {
+    return { spokenText, point: null };
   }
 
-  const match = text.match(/\[POINT:none\]\s*$/);
-  if (!match) {
-    return { spokenText: text, point: null };
+  const target = targetLookup.get(targetId);
+  if (!target) {
+    return { spokenText, point: null };
   }
-  const spokenText = text.slice(0, match.index).trim();
-  return { spokenText, point: null };
+
+  return {
+    spokenText,
+    point: {
+      x: target.x,
+      y: target.y,
+      label: target.label,
+      screenNumber: target.screenNumber,
+      source: "visual-target",
+      bounds: target.bounds,
+      targetId: target.id,
+    },
+  };
 }
 
-function buildElementLookup(images) {
+function buildVisualTargetLookup(images) {
   const lookup = new Map();
   for (const image of images) {
-    const elements = Array.isArray(image?.elements) ? image.elements : [];
-    for (const element of elements) {
-      const id = String(element?.id || "").trim();
-      const x = Number(element?.centerX);
-      const y = Number(element?.centerY);
-      const left = Number(element?.x);
-      const top = Number(element?.y);
-      const width = Number(element?.width);
-      const height = Number(element?.height);
+    const targets = Array.isArray(image?.visualTargets) ? image.visualTargets : [];
+    for (const target of targets) {
+      const id = String(target?.id || "").trim();
+      const x = Number(target?.centerX);
+      const y = Number(target?.centerY);
+      const left = Number(target?.x);
+      const top = Number(target?.y);
+      const width = Number(target?.width);
+      const height = Number(target?.height);
       if (!id || !Number.isFinite(x) || !Number.isFinite(y)) {
         continue;
       }
 
-      const screenMatch = id.match(/^screen(\d+)-/i);
       lookup.set(id, {
         id,
         x,
         y,
-        label: String(element?.name || "").trim() || null,
-        screenNumber: screenMatch ? Number(screenMatch[1]) : null,
+        label: String(target?.labelHint || target?.kind || id).trim() || id,
+        screenNumber: Number.isFinite(Number(image?.screenNumber)) ? Number(image.screenNumber) : null,
         bounds: Number.isFinite(left) && Number.isFinite(top) && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
           ? { x: left, y: top, width, height }
           : null,
@@ -395,33 +408,27 @@ function buildElementLookup(images) {
   return lookup;
 }
 
-function formatElementCatalog(images, transcript) {
-  const elements = images.flatMap((image) => Array.isArray(image?.elements) ? image.elements : []);
-  if (elements.length === 0) {
+function formatVisualTargetManifest(images) {
+  const targets = images.flatMap((image) => {
+    const screenNumber = Number(image?.screenNumber);
+    return (Array.isArray(image?.visualTargets) ? image.visualTargets : []).map((target) => ({ target, screenNumber }));
+  });
+  if (targets.length === 0) {
     return "";
   }
 
-  const queryWords = extractWords(transcript);
-  const rows = elements
-    .filter((element) => element && element.name && Number.isFinite(Number(element.centerX)) && Number.isFinite(Number(element.centerY)))
-    .map((element) => ({
-      element,
-      score: scoreElementForTranscript(element, queryWords),
-    }))
-    .sort((first, second) => second.score - first.score)
+  const rows = targets
+    .filter(({ target }) => target && target.id && Number.isFinite(Number(target.centerX)) && Number.isFinite(Number(target.centerY)))
     .slice(0, 80)
-    .map((element) => {
-      const candidate = element.element;
-      const id = String(candidate.id || "");
-      const type = String(candidate.controlType || "Control").replace(/^ControlType\./, "");
-      const name = String(candidate.name).slice(0, 90);
-      const windowTitle = String(candidate.windowTitle || "").slice(0, 90);
-      const centerX = Math.round(Number(candidate.centerX));
-      const centerY = Math.round(Number(candidate.centerY));
-      const width = Math.round(Number(candidate.width || 0));
-      const height = Math.round(Number(candidate.height || 0));
-      const clickable = candidate.isClickable ? "clickable" : "visible";
-      return `${id} | ${type} | ${clickable} | "${name}" | window="${windowTitle}" | center=${centerX},${centerY} | size=${width}x${height}`;
+    .map(({ target, screenNumber }) => {
+      const id = String(target.id || "");
+      const kind = String(target.kind || "visual-target");
+      const centerX = Math.round(Number(target.centerX));
+      const centerY = Math.round(Number(target.centerY));
+      const width = Math.round(Number(target.width || 0));
+      const height = Math.round(Number(target.height || 0));
+      const confidence = Number(target.confidence || 0).toFixed(2);
+      return `${id} | ${kind} | screen=${screenNumber || "unknown"} | center=${centerX},${centerY} | size=${width}x${height} | confidence=${confidence}`;
     });
 
   if (rows.length === 0) {
@@ -431,18 +438,24 @@ function formatElementCatalog(images, transcript) {
   return rows.join("\n");
 }
 
-function scoreElementForTranscript(element, queryWords) {
-  const nameWords = extractWords(`${element?.name || ""} ${element?.controlType || ""} ${element?.windowTitle || ""}`);
-  const overlap = queryWords.filter((word) => nameWords.includes(word)).length;
-  const clickableBonus = element?.isClickable ? 35 : 0;
-  const localScore = Number(element?.score || 0);
-  return overlap * 100 + clickableBonus + Math.min(localScore, 120);
+function extractJsonObject(text) {
+  const trimmed = String(text || "").trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    return fenced[1].trim();
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
 }
 
-function extractWords(text) {
-  const stopWords = new Set(["a", "an", "and", "are", "button", "click", "control", "cursor", "find", "for", "go", "i", "icon", "it", "me", "of", "on", "please", "point", "show", "the", "there", "this", "to", "where", "you"]);
-  return (String(text || "").toLowerCase().match(/[a-z0-9]+/g) || [])
-    .filter((word) => word.length > 1 && !stopWords.has(word));
+function sanitizeSpokenText(text) {
+  return String(text || "")
+    .replace(/\b[CR]\d{2}\b/g, "that spot")
+    .replace(/\bscreen\d+\b/gi, "the screen")
+    .replace(/\[(?:POINT|POINT-ELEMENT|BOX|TARGET):[^\]]+\]/gi, "")
+    .trim();
 }
 
 function requireMethod(request, expectedMethod) {
