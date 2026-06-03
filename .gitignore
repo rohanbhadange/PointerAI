@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+obj/
+artifacts/
+
+# Local runtime and tool state
+.appdata/
+.dotnet/
+.dotnet-home/
+.localappdata/
+.nuget/
+.nuget-source/
+.tmp/
+
+# IDE and OS noise
+.vs/
+.vscode/
+*.user
+*.suo
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Logs and diagnostics
+*.log
+*.etl
+*.dmp
