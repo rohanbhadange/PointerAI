@@ -8,6 +8,7 @@ Run("ignores missing screen number", IgnoresMissingScreenNumber);
 Run("maps physical pixels under dpi metadata", MapsPhysicalPixelsUnderDpiMetadata);
 Run("maps exact element center on explicit scaled secondary screen", MapsExactElementCenterOnExplicitScaledSecondaryScreen);
 Run("maps target bounds with point center", MapsTargetBoundsWithPointCenter);
+Run("maps computer-use screenshot point", MapsComputerUseScreenshotPoint);
 Run("maps selected UIA element by local id", MapsSelectedUiaElementByLocalId);
 Run("maps selected visual target by local id", MapsSelectedVisualTargetByLocalId);
 await RunAsync("captures screenshot and accessibility catalog", CaptureSmoke.RunAsync);
@@ -160,6 +161,24 @@ static void MapsTargetBoundsWithPointCenter()
     AssertEqual(180, bounds.Top, "bounds.top");
     AssertEqual(100, bounds.Width, "bounds.width");
     AssertEqual(80, bounds.Height, "bounds.height");
+}
+
+static void MapsComputerUseScreenshotPoint()
+{
+    var captures = new[]
+    {
+        Capture(screenNumber: 1, isCursorScreen: true, left: 10, top: 20, displayWidth: 1000, displayHeight: 800, shotWidth: 500, shotHeight: 400)
+    };
+
+    Assert(PointMapper.TryMapPoint(
+        new ChatPoint(125, 100, "Generate Mesh", 1, "computer-use"),
+        captures,
+        out var target));
+
+    AssertEqual(260, target.DesktopPoint.X, "x");
+    AssertEqual(220, target.DesktopPoint.Y, "y");
+    AssertStringEqual("Generate Mesh", target.Label ?? "", "label");
+    AssertEqual(1, target.ScreenNumber ?? 0, "screen");
 }
 
 static void MapsSelectedUiaElementByLocalId()

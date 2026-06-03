@@ -20,7 +20,9 @@ public sealed class ScreenCaptureService
     private const int VisualTargetTileHeight = 72;
     private const int VisualTargetMinSpacing = 52;
 
-    public Task<IReadOnlyList<ScreenCapturePayload>> CaptureAllScreensAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ScreenCapturePayload>> CaptureAllScreensAsync(
+        CancellationToken cancellationToken,
+        bool includeVisualAtlas = true)
     {
         return Task.Run<IReadOnlyList<ScreenCapturePayload>>(() =>
         {
@@ -61,17 +63,28 @@ public sealed class ScreenCaptureService
                 bitmap.Save(memoryStream, ImageFormat.Png);
                 AppLogger.Info($"PERF stage=screenshot_pixels screen={index + 1} ms={screenStopwatch.ElapsedMilliseconds}");
 
-                var atlasStopwatch = Stopwatch.StartNew();
-                var visualTargets = GenerateVisualTargets(bitmap, index + 1);
-                using var visualAtlasStream = new MemoryStream();
-                using (var atlasBitmap = new Bitmap(bitmap))
-                using (var atlasGraphics = Graphics.FromImage(atlasBitmap))
+                IReadOnlyList<VisualTargetPayload> visualTargets = [];
+                string? visualAtlasBase64Data = null;
+                if (includeVisualAtlas)
                 {
-                    DrawVisualAtlas(atlasGraphics, visualTargets);
-                    atlasBitmap.Save(visualAtlasStream, ImageFormat.Png);
+                    var atlasStopwatch = Stopwatch.StartNew();
+                    visualTargets = GenerateVisualTargets(bitmap, index + 1);
+                    using var visualAtlasStream = new MemoryStream();
+                    using (var atlasBitmap = new Bitmap(bitmap))
+                    using (var atlasGraphics = Graphics.FromImage(atlasBitmap))
+                    {
+                        DrawVisualAtlas(atlasGraphics, visualTargets);
+                        atlasBitmap.Save(visualAtlasStream, ImageFormat.Png);
+                    }
+
+                    visualAtlasBase64Data = Convert.ToBase64String(visualAtlasStream.ToArray());
+                    LogVisualAtlasDiagnostic(index + 1, bounds, visualTargets, atlasStopwatch.Elapsed);
+                    AppLogger.Info($"PERF stage=visual_atlas screen={index + 1} ms={atlasStopwatch.ElapsedMilliseconds} targets={visualTargets.Count}");
                 }
-                LogVisualAtlasDiagnostic(index + 1, bounds, visualTargets, atlasStopwatch.Elapsed);
-                AppLogger.Info($"PERF stage=visual_atlas screen={index + 1} ms={atlasStopwatch.ElapsedMilliseconds} targets={visualTargets.Count}");
+                else
+                {
+                    AppLogger.Info($"PERF stage=visual_atlas screen={index + 1} skipped=true");
+                }
 
                 var screenNumber = index + 1;
                 var label = screens.Length == 1
@@ -84,7 +97,7 @@ public sealed class ScreenCaptureService
                     label,
                     "image/png",
                     Convert.ToBase64String(memoryStream.ToArray()),
-                    Convert.ToBase64String(visualAtlasStream.ToArray()),
+                    visualAtlasBase64Data,
                     null,
                     isCursorScreen,
                     screenNumber,

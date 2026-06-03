@@ -20,7 +20,12 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
     private readonly GlobalPushToTalkMonitor hotkeyMonitor;
     private readonly List<ConversationTurn> conversationHistory = [];
     private readonly SemaphoreSlim interactionGate = new(1, 1);
+    private const string LocatorProvider = "openai-computer-use";
     private static readonly Regex WordRegex = new("[a-z0-9]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly HashSet<string> PointingIntentWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "click", "find", "locate", "open", "point", "press", "select", "show", "where"
+    };
     private static readonly HashSet<string> CatalogDiagnosticStopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "a", "an", "and", "are", "button", "click", "control", "cursor", "find", "for", "go", "i", "it", "me",
@@ -269,12 +274,12 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         await RunOnUiAsync(overlayManager.SuspendVisualsForCapture);
         try
         {
-            var captures = await screenCaptureService.CaptureAllScreensAsync(cancellationToken);
+            var captures = await screenCaptureService.CaptureAllScreensAsync(cancellationToken, includeVisualAtlas: false);
             AppLogger.Info($"PERF stage=screen_capture_total ms={stopwatch.ElapsedMilliseconds}");
             AppLogger.Info($"Screen capture completed. Count={captures.Count}");
             foreach (var capture in captures)
             {
-                AppLogger.Info($"Screen capture elements. Screen={capture.ScreenNumber} Count={capture.Elements?.Count ?? 0} Dpi={capture.DpiScaleX:0.00}x{capture.DpiScaleY:0.00} Size={capture.ScreenshotWidthInPixels}x{capture.ScreenshotHeightInPixels}");
+                AppLogger.Info($"Screen capture elements. Screen={capture.ScreenNumber} Count={capture.Elements?.Count ?? 0} VisualTargets={capture.VisualTargets?.Count ?? 0} Atlas={capture.VisualAtlasBase64Data?.Length ?? 0} Dpi={capture.DpiScaleX:0.00}x{capture.DpiScaleY:0.00} Size={capture.ScreenshotWidthInPixels}x{capture.ScreenshotHeightInPixels}");
             }
 
             return captures;
@@ -297,19 +302,71 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
             Status = new CompanionStatus(CompanionVoiceState.Processing, "Thinking", LastTranscript: transcript);
         });
 
+        var isPointingRequest = IsPointingRequest(transcript);
+        AppLogger.Info($"Pointing intent. IsPointingRequest={isPointingRequest} Provider={LocatorProvider}");
         LogElementCatalogDiagnostics(transcript, captures);
-        var chatStopwatch = Stopwatch.StartNew();
-        var chatResponse = await workerClient.SendChatAsync(
-            transcript,
-            captures,
-            conversationHistory,
-            cancellationToken);
-        AppLogger.Info($"PERF stage=chat_total ms={chatStopwatch.ElapsedMilliseconds}");
 
-        var spokenText = string.IsNullOrWhiteSpace(chatResponse.SpokenText)
-            ? chatResponse.Text
-            : chatResponse.SpokenText;
-        AppLogger.Info($"Chat response parsed. TextLength={chatResponse.Text.Length} SpokenLength={spokenText.Length} HasPoint={chatResponse.Point is not null}");
+        Task<LocateResponse>? locateTask = null;
+        ScreenCapturePayload? locateCapture = null;
+        if (isPointingRequest)
+        {
+            locateCapture = SelectLocateCapture(captures);
+            if (locateCapture is not null)
+            {
+                locateTask = workerClient.LocateAsync(transcript, locateCapture, LocatorProvider, cancellationToken);
+            }
+            else
+            {
+                AppLogger.Info("No capture available for locator.");
+            }
+        }
+
+        string spokenText;
+        if (isPointingRequest)
+        {
+            AppLogger.Info("Skipping /chat for pointing request; locator is authoritative.");
+            spokenText = "";
+        }
+        else
+        {
+            var chatStopwatch = Stopwatch.StartNew();
+            var chatResponse = await workerClient.SendChatAsync(
+                transcript,
+                captures,
+                conversationHistory,
+                cancellationToken);
+            AppLogger.Info($"PERF stage=chat_total ms={chatStopwatch.ElapsedMilliseconds}");
+
+            spokenText = string.IsNullOrWhiteSpace(chatResponse.SpokenText)
+                ? chatResponse.Text
+                : chatResponse.SpokenText;
+            AppLogger.Info($"Chat response parsed. TextLength={chatResponse.Text.Length} SpokenLength={spokenText.Length} HasPoint={chatResponse.Point is not null}");
+        }
+
+        ChatPoint? point = null;
+        if (locateTask is not null && locateCapture is not null)
+        {
+            try
+            {
+                var locateResponse = await locateTask;
+                point = ToComputerUsePoint(locateResponse, locateCapture);
+                if (point is null)
+                {
+                    AppLogger.Info($"Locator did not return a valid point. Ok={locateResponse.Ok} Error={locateResponse.Error ?? ""}");
+                }
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                AppLogger.Error("Locator request failed", error);
+            }
+        }
+
+        if (isPointingRequest)
+        {
+            spokenText = point is not null
+                ? "I'll point to it."
+                : "I couldn't find that on the screen.";
+        }
 
         conversationHistory.Add(new ConversationTurn(transcript, spokenText));
         if (conversationHistory.Count > 10)
@@ -317,9 +374,9 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
             conversationHistory.RemoveRange(0, conversationHistory.Count - 10);
         }
 
-        if (PointMapper.TryMapPoint(chatResponse.Point, captures, out var pointTarget))
+        if (PointMapper.TryMapPoint(point, captures, out var pointTarget))
         {
-            AppLogger.Info($"Point mapped. Label={pointTarget.Label ?? ""} PointSource={chatResponse.Point?.Source ?? "unknown"} SourceX={chatResponse.Point?.X:0.0} SourceY={chatResponse.Point?.Y:0.0} Screen={chatResponse.Point?.ScreenNumber?.ToString() ?? "cursor"} DesktopX={pointTarget.DesktopPoint.X:0.0} DesktopY={pointTarget.DesktopPoint.Y:0.0} HasBounds={pointTarget.DesktopBounds is not null}");
+            AppLogger.Info($"Point mapped. Label={pointTarget.Label ?? ""} PointSource={point?.Source ?? "unknown"} SourceX={point?.X:0.0} SourceY={point?.Y:0.0} Screen={point?.ScreenNumber?.ToString() ?? "cursor"} DesktopX={pointTarget.DesktopPoint.X:0.0} DesktopY={pointTarget.DesktopPoint.Y:0.0} HasBounds={pointTarget.DesktopBounds is not null}");
             await RunOnUiAsync(() => overlayManager.PointAt(pointTarget));
             AppLogger.Info($"PERF stage=release_to_point ms={processStopwatch.ElapsedMilliseconds}");
         }
@@ -374,6 +431,43 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
     private static Task RunOnUiAsync(Action action)
     {
         return Application.Current.Dispatcher.InvokeAsync(action).Task;
+    }
+
+    private static bool IsPointingRequest(string transcript)
+    {
+        foreach (Match match in WordRegex.Matches(transcript))
+        {
+            if (PointingIntentWords.Contains(match.Value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ScreenCapturePayload? SelectLocateCapture(IReadOnlyList<ScreenCapturePayload> captures)
+    {
+        return captures.FirstOrDefault(capture => capture.IsCursorScreen) ??
+               captures.OrderBy(capture => capture.ScreenNumber).FirstOrDefault();
+    }
+
+    private static ChatPoint? ToComputerUsePoint(LocateResponse locateResponse, ScreenCapturePayload capture)
+    {
+        if (!locateResponse.Ok ||
+            locateResponse.X is not { } x ||
+            locateResponse.Y is not { } y ||
+            !string.Equals(locateResponse.CoordinateSpace, "screenshot_pixels_top_left", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return new ChatPoint(
+            x,
+            y,
+            locateResponse.Label,
+            locateResponse.ScreenNumber ?? capture.ScreenNumber,
+            "computer-use");
     }
 
     private static void LogElementCatalogDiagnostics(string transcript, IReadOnlyList<ScreenCapturePayload> captures)

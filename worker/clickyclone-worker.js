@@ -5,6 +5,7 @@ const CORS_HEADERS = {
 };
 
 const OPENAI_MODEL = "gpt-4.1-mini";
+const OPENAI_COMPUTER_MODEL = "gpt-5.5";
 const ELEVENLABS_MODEL = "eleven_flash_v2_5";
 export default {
   async fetch(request, env) {
@@ -28,6 +29,11 @@ export default {
         return await handleChat(request, env);
       }
 
+      if (url.pathname === "/locate") {
+        requireMethod(request, "POST");
+        return await handleLocate(request, env);
+      }
+
       if (url.pathname === "/tts") {
         requireMethod(request, "POST");
         return await handleTextToSpeech(request, env);
@@ -49,6 +55,163 @@ export default {
     }
   },
 };
+
+async function handleLocate(request, env) {
+  const body = await request.json();
+  const provider = String(body.provider || env.LOCATOR_PROVIDER || "openai-computer-use").trim();
+  const goal = String(body.goal || "").trim();
+  const screenshotBase64 = String(body.screenshotBase64 || "");
+  const mimeType = String(body.mimeType || "image/png");
+  const width = Number(body.width);
+  const height = Number(body.height);
+  const screenNumber = Number.isFinite(Number(body.screenNumber)) ? Number(body.screenNumber) : null;
+
+  if (!goal || !screenshotBase64 || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return jsonResponse({
+      ok: false,
+      provider,
+      error: "Missing goal, screenshotBase64, width, or height",
+    }, 400);
+  }
+
+  if (provider === "openai-computer-use") {
+    return jsonResponse(await locateWithOpenAIComputerUse({
+      env,
+      provider,
+      goal,
+      screenshotBase64,
+      mimeType,
+      width,
+      height,
+      screenNumber,
+    }));
+  }
+
+  return jsonResponse({
+    ok: false,
+    provider,
+    error: `Unsupported locator provider: ${provider}`,
+  }, 400);
+}
+
+async function locateWithOpenAIComputerUse({
+  env,
+  provider,
+  goal,
+  screenshotBase64,
+  mimeType,
+  width,
+  height,
+  screenNumber,
+}) {
+  if (!env.OPENAI_API_KEY) {
+    return {
+      ok: false,
+      provider,
+      error: "OPENAI_API_KEY is not configured",
+    };
+  }
+
+  const model = env.OPENAI_COMPUTER_MODEL || OPENAI_COMPUTER_MODEL;
+  const prompt = buildOpenAIComputerPrompt(goal, width, height);
+  const firstResponse = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      tools: [{ type: "computer" }],
+      input: prompt,
+    }),
+  });
+
+  const firstText = await firstResponse.text();
+  const firstData = safeParseJSON(firstText) || firstText;
+  if (!firstResponse.ok) {
+    return {
+      ok: false,
+      provider,
+      error: firstData,
+    };
+  }
+
+  const firstPoint = extractOpenAIComputerPoint(firstData);
+  if (firstPoint) {
+    return normalizeLocatePoint({
+      provider,
+      goal,
+      point: firstPoint,
+      width,
+      height,
+      screenNumber,
+    });
+  }
+
+  const screenshotCall = findOpenAIComputerCall(firstData, (action) => action.type === "screenshot");
+  if (!screenshotCall?.call_id || typeof firstData?.id !== "string") {
+    return {
+      ok: false,
+      provider,
+      error: "No OpenAI computer-use coordinate or screenshot request returned",
+      raw: firstData,
+    };
+  }
+
+  const secondResponse = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      tools: [{ type: "computer" }],
+      previous_response_id: firstData.id,
+      input: [
+        {
+          type: "computer_call_output",
+          call_id: screenshotCall.call_id,
+          output: {
+            type: "computer_screenshot",
+            image_url: `data:${mimeType};base64,${screenshotBase64}`,
+            detail: "original",
+          },
+        },
+      ],
+    }),
+  });
+
+  const secondText = await secondResponse.text();
+  const secondData = safeParseJSON(secondText) || secondText;
+  if (!secondResponse.ok) {
+    return {
+      ok: false,
+      provider,
+      error: secondData,
+    };
+  }
+
+  const secondPoint = extractOpenAIComputerPoint(secondData);
+  if (!secondPoint) {
+    return {
+      ok: false,
+      provider,
+      error: "No OpenAI computer-use coordinate returned after screenshot",
+      raw: secondData,
+    };
+  }
+
+  return normalizeLocatePoint({
+    provider,
+    goal,
+    point: secondPoint,
+    width,
+    height,
+    screenNumber,
+  });
+}
 
 async function handleTranscribe(request, env) {
   assertSecret(env.ASSEMBLYAI_API_KEY, "ASSEMBLYAI_API_KEY");
@@ -376,6 +539,95 @@ function parseTargetSelection(text, targetLookup = new Map()) {
   };
 }
 
+function buildOpenAIComputerPrompt(goal, width, height) {
+  return `
+You are a precise GUI locator for a Windows desktop application.
+
+The screenshot is exactly ${Math.round(width)} pixels wide and ${Math.round(height)} pixels tall.
+
+Coordinate system:
+- origin is the top-left corner of the screenshot
+- x increases right
+- y increases down
+- coordinates must be screenshot image pixels
+
+Goal:
+"${goal}"
+
+Use the computer tool to return the UI action you would use to click the visual center of the single UI control that best satisfies the goal.
+
+Rules:
+- Return one click target only.
+- Prefer the actual clickable control, not nearby explanatory text.
+- If the target is a labeled button, click the center of the button area.
+- If the target is a tree item, click the center of the row text.
+- If the target is an icon-only control, click the visual center of the icon's clickable area.
+- If no relevant target is visible, do not return a click action.
+- Do not explain.
+`.trim();
+}
+
+function normalizeLocatePoint({ provider, goal, point, width, height, screenNumber }) {
+  return {
+    ok: true,
+    provider,
+    x: clamp(Math.round(point.x), 0, Math.round(width)),
+    y: clamp(Math.round(point.y), 0, Math.round(height)),
+    label: goal,
+    screenNumber,
+    coordinateSpace: "screenshot_pixels_top_left",
+    rawAction: point.rawAction,
+  };
+}
+
+function extractOpenAIComputerPoint(data) {
+  const call = findOpenAIComputerCall(data, (action) =>
+    ["click", "double_click", "move"].includes(String(action?.type || "")));
+  if (!call || hasOpenAISafetyChecks(call.item)) {
+    return null;
+  }
+
+  const x = Number(call.action?.x);
+  const y = Number(call.action?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return {
+    x,
+    y,
+    rawAction: call.action,
+  };
+}
+
+function findOpenAIComputerCall(data, predicate) {
+  const output = Array.isArray(data?.output) ? data.output : [];
+  for (const item of output) {
+    if (item?.type !== "computer_call") {
+      continue;
+    }
+
+    const actions = Array.isArray(item.actions)
+      ? item.actions
+      : item.action
+        ? [item.action]
+        : [];
+
+    for (const action of actions) {
+      if (predicate(action)) {
+        return { item, action, call_id: item.call_id };
+      }
+    }
+  }
+
+  return null;
+}
+
+function hasOpenAISafetyChecks(computerCall) {
+  return Array.isArray(computerCall?.pending_safety_checks) &&
+    computerCall.pending_safety_checks.length > 0;
+}
+
 function buildVisualTargetLookup(images) {
   const lookup = new Map();
   for (const image of images) {
@@ -496,4 +748,8 @@ function base64ToUint8Array(base64) {
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }

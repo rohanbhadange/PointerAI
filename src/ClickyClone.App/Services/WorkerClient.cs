@@ -54,7 +54,10 @@ public sealed class WorkerClient
             ? sourceElement.GetString()
             : "";
         AppLogger.Info($"Worker exact pointing support. Ok={ok} Source={source}");
-        return ok && string.Equals(source, "element", StringComparison.OrdinalIgnoreCase);
+        return ok &&
+               (string.Equals(source, "element", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "visual-target", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "computer-use", StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<string> GetAssemblyAITokenAsync(CancellationToken cancellationToken)
@@ -130,6 +133,47 @@ public sealed class WorkerClient
 
         return JsonSerializer.Deserialize<ChatResponse>(responseText, JsonOptions)
                ?? throw new InvalidOperationException("Worker chat response could not be parsed.");
+    }
+
+    public async Task<LocateResponse> LocateAsync(
+        string goal,
+        ScreenCapturePayload capture,
+        string provider,
+        CancellationToken cancellationToken)
+    {
+        AppLogger.Info(
+            $"Worker /locate request started. Provider={provider} GoalLength={goal.Length} " +
+            $"Screen={capture.ScreenNumber} Size={capture.ScreenshotWidthInPixels}x{capture.ScreenshotHeightInPixels}");
+
+        using var response = await httpClient.PostAsJsonAsync(
+            new Uri(baseUri, "/locate"),
+            new
+            {
+                provider,
+                goal,
+                screenshotBase64 = capture.Base64Data,
+                mimeType = capture.MediaType,
+                width = capture.ScreenshotWidthInPixels,
+                height = capture.ScreenshotHeightInPixels,
+                screenNumber = capture.ScreenNumber
+            },
+            JsonOptions,
+            cancellationToken);
+
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        AppLogger.Info($"Worker /locate response. Status={(int)response.StatusCode} BodyLength={responseText.Length}");
+        response.EnsureSuccessStatusCode();
+
+        var locateResponse = JsonSerializer.Deserialize<LocateResponse>(responseText, JsonOptions)
+                             ?? throw new InvalidOperationException("Worker locate response could not be parsed.");
+
+        AppLogger.Info(
+            $"Worker /locate parsed. Ok={locateResponse.Ok} Provider={locateResponse.Provider ?? ""} " +
+            $"RawX={locateResponse.X?.ToString("0.0") ?? "none"} RawY={locateResponse.Y?.ToString("0.0") ?? "none"} " +
+            $"Screen={locateResponse.ScreenNumber?.ToString() ?? "none"} CoordinateSpace={locateResponse.CoordinateSpace ?? ""} " +
+            $"HasRawAction={locateResponse.RawAction.HasValue} Error={locateResponse.Error ?? ""}");
+
+        return locateResponse;
     }
 
     public async Task<string> TranscribeAudioAsync(byte[] wavBytes, CancellationToken cancellationToken)

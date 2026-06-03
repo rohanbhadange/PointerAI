@@ -9,16 +9,69 @@ const workerFactorySource = `${workerSource.replace("export default", "const wor
 const worker = new Function(workerFactorySource)();
 
 let capturedOpenAIRequest = null;
+const capturedOpenAIComputerRequests = [];
 const openAIOutputs = [
   JSON.stringify({ spokenText: "Use the marker on the browser's new tab control.", targetId: "C07", needsZoom: false }),
   JSON.stringify({ spokenText: "I could not find a reliable matching marker.", targetId: null, needsZoom: false }),
   "This should be rejected. [BOX:1160,52,80,28:Print Preview:screen1:0.94]",
 ];
+const openAIComputerOutputs = [
+  {
+    output: [
+      {
+        type: "computer_call",
+        call_id: "call_direct",
+        actions: [{ type: "click", button: "left", x: 812.4, y: 136.2 }],
+        pending_safety_checks: [],
+      },
+    ],
+  },
+  {
+    id: "resp_screenshot",
+    output: [
+      {
+        type: "computer_call",
+        call_id: "call_screenshot",
+        actions: [{ type: "screenshot" }],
+        pending_safety_checks: [],
+      },
+    ],
+  },
+  {
+    output: [
+      {
+        type: "computer_call",
+        call_id: "call_after_screenshot",
+        actions: [{ type: "move", x: 33.7, y: 44.8 }],
+        pending_safety_checks: [],
+      },
+    ],
+  },
+  {
+    output: [
+      {
+        type: "computer_call",
+        call_id: "call_safety",
+        actions: [{ type: "click", button: "left", x: 20, y: 25 }],
+        pending_safety_checks: [{ id: "safe_1", code: "malicious_instructions" }],
+      },
+    ],
+  },
+];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
   const target = String(url);
   if (target === "https://api.openai.com/v1/responses") {
-    capturedOpenAIRequest = JSON.parse(String(init?.body || "{}"));
+    const requestBody = JSON.parse(String(init?.body || "{}"));
+    if (Array.isArray(requestBody.tools) && requestBody.tools.some((tool) => tool.type === "computer")) {
+      capturedOpenAIComputerRequests.push(requestBody);
+      return new Response(JSON.stringify(openAIComputerOutputs.shift()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    capturedOpenAIRequest = requestBody;
     return new Response(JSON.stringify({
       output_text: openAIOutputs.shift(),
     }), {
@@ -146,6 +199,76 @@ try {
 
   assertEqual(200, rejectedBoxResponse.status, "rejectedBox.response.status");
   assertEqual(null, rejectedBoxJson.point, "rejectedBox.point");
+
+  const locateResponse = await worker.fetch(new Request("https://example.test/locate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      goal: "generate mesh",
+      screenshotBase64: "aGVsbG8=",
+      mimeType: "image/png",
+      width: 1536,
+      height: 960,
+      screenNumber: 1,
+    }),
+  }), { OPENAI_API_KEY: "test-openai-key" });
+  const locateJson = await locateResponse.json();
+
+  assertEqual(200, locateResponse.status, "locate.response.status");
+  assertEqual(true, locateJson.ok, "locate.ok");
+  assertEqual("openai-computer-use", locateJson.provider, "locate.provider");
+  assertEqual(812, locateJson.x, "locate.x");
+  assertEqual(136, locateJson.y, "locate.y");
+  assertEqual(1, locateJson.screenNumber, "locate.screenNumber");
+  assertEqual("screenshot_pixels_top_left", locateJson.coordinateSpace, "locate.coordinateSpace");
+
+  const locateText = capturedOpenAIComputerRequests[0]?.input || "";
+  assertIncludes(locateText, "screenshot is exactly 1536 pixels wide and 960 pixels tall", "locate prompt");
+  assertIncludes(locateText, "click the visual center", "locate prompt");
+  assertEqual("computer", capturedOpenAIComputerRequests[0]?.tools?.[0]?.type, "locate.tool.type");
+
+  const screenshotLocateResponse = await worker.fetch(new Request("https://example.test/locate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      provider: "openai-computer-use",
+      goal: "point to the address bar",
+      screenshotBase64: "aGVsbG8=",
+      mimeType: "image/png",
+      width: 100,
+      height: 100,
+      screenNumber: 2,
+    }),
+  }), { OPENAI_API_KEY: "test-openai-key" });
+  const screenshotLocateJson = await screenshotLocateResponse.json();
+
+  assertEqual(200, screenshotLocateResponse.status, "screenshotLocate.response.status");
+  assertEqual(true, screenshotLocateJson.ok, "screenshotLocate.ok");
+  assertEqual(34, screenshotLocateJson.x, "screenshotLocate.x");
+  assertEqual(45, screenshotLocateJson.y, "screenshotLocate.y");
+  assertEqual(2, screenshotLocateJson.screenNumber, "screenshotLocate.screenNumber");
+  assertEqual("resp_screenshot", capturedOpenAIComputerRequests[2]?.previous_response_id, "screenshotLocate.previous_response_id");
+  assertEqual("computer_call_output", capturedOpenAIComputerRequests[2]?.input?.[0]?.type, "screenshotLocate.input.type");
+  assertEqual("call_screenshot", capturedOpenAIComputerRequests[2]?.input?.[0]?.call_id, "screenshotLocate.call_id");
+  assertEqual("original", capturedOpenAIComputerRequests[2]?.input?.[0]?.output?.detail, "screenshotLocate.detail");
+
+  const safetyLocateResponse = await worker.fetch(new Request("https://example.test/locate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      provider: "openai-computer-use",
+      goal: "click suspicious thing",
+      screenshotBase64: "aGVsbG8=",
+      mimeType: "image/png",
+      width: 100,
+      height: 100,
+      screenNumber: 1,
+    }),
+  }), { OPENAI_API_KEY: "test-openai-key" });
+  const safetyLocateJson = await safetyLocateResponse.json();
+
+  assertEqual(200, safetyLocateResponse.status, "safetyLocate.response.status");
+  assertEqual(false, safetyLocateJson.ok, "safetyLocate.ok");
 
   console.log("worker visual reticle pointing: ok");
 } finally {

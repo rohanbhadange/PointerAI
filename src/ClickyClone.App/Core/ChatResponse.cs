@@ -20,3 +20,14 @@ public sealed record ChatBounds(
     double Y,
     double Width,
     double Height);
+
+public sealed record LocateResponse(
+    bool Ok,
+    string? Provider,
+    double? X,
+    double? Y,
+    string? Label,
+    int? ScreenNumber,
+    string? CoordinateSpace,
+    string? Error,
+    System.Text.Json.JsonElement? RawAction = null);
