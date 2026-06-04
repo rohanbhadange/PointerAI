@@ -14,4 +14,9 @@
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\worker\clickyclone-worker.js" Link="SetupWorker\clickyclone-worker.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\.env.example" Link=".env.example" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

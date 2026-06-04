@@ -5,13 +5,13 @@ namespace ClickyClone.Services;
 
 public sealed class TextToSpeechPlayer : IDisposable
 {
-    private readonly WorkerClient workerClient;
+    private readonly IBackendClient backendClient;
     private WaveOutEvent? waveOut;
     private Mp3FileReader? mp3Reader;
 
-    public TextToSpeechPlayer(WorkerClient workerClient)
+    public TextToSpeechPlayer(IBackendClient backendClient)
     {
-        this.workerClient = workerClient;
+        this.backendClient = backendClient;
     }
 
     public async Task SpeakAsync(string text, CancellationToken cancellationToken)
@@ -19,7 +19,7 @@ public sealed class TextToSpeechPlayer : IDisposable
         Stop();
         AppLogger.Info("TTS playback start requested.");
 
-        var audioBytes = await workerClient.TextToSpeechAsync(text, cancellationToken);
+        var audioBytes = await backendClient.TextToSpeechAsync(text, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         mp3Reader = new Mp3FileReader(new MemoryStream(audioBytes));

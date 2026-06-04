@@ -1,6 +1,18 @@
+using System.IO;
+using System.Reflection;
+using System.Text.Json;
 using ClickyClone.Core;
+using ClickyClone.Services;
 using ClickyClone.Tests;
 
+Run("settings save and load worker url", SettingsSaveAndLoadWorkerUrl);
+Run("settings migrates old worker url", SettingsMigratesOldWorkerUrl);
+Run("settings save and load local mode", SettingsSaveAndLoadLocalMode);
+Run("parses local env", ParsesLocalEnv);
+await RunAsync("local diagnostics reports booleans", LocalDiagnosticsReportsBooleans);
+Run("extracts local computer-use point", ExtractsLocalComputerUsePoint);
+Run("routes guidance requests with optional pointing", RoutesGuidanceRequestsWithOptionalPointing);
+Run("parses wrangler worker url", ParsesWranglerWorkerUrl);
 Run("maps cursor-screen point", MapsCursorScreenPoint);
 Run("maps explicit secondary screen with negative coordinates", MapsExplicitSecondaryScreenWithNegativeCoordinates);
 Run("clamps out-of-bounds model coordinates", ClampsOutOfBoundsCoordinates);
@@ -14,6 +26,111 @@ Run("maps selected visual target by local id", MapsSelectedVisualTargetByLocalId
 await RunAsync("captures screenshot and accessibility catalog", CaptureSmoke.RunAsync);
 
 Console.WriteLine("All local simulation tests passed.");
+
+static void SettingsSaveAndLoadWorkerUrl()
+{
+    var settingsPath = Path.Combine(Path.GetTempPath(), "ClickyClone.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+    var store = new AppSettingsStore(settingsPath);
+    store.Save(new AppSettings("worker", "https://example.workers.dev/", false));
+
+    var loaded = store.Load();
+    AssertStringEqual("worker", loaded.BackendMode, "backend mode");
+    AssertStringEqual("https://example.workers.dev/", loaded.WorkerBaseUrl ?? "", "worker url");
+    Assert(!loaded.UseDeveloperWorker);
+}
+
+static void SettingsSaveAndLoadLocalMode()
+{
+    var settingsPath = Path.Combine(Path.GetTempPath(), "ClickyClone.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+    var store = new AppSettingsStore(settingsPath);
+    store.Save(new AppSettings("local"));
+
+    var loaded = store.Load();
+    AssertStringEqual("local", loaded.BackendMode, "backend mode");
+}
+
+static void SettingsMigratesOldWorkerUrl()
+{
+    var settingsPath = Path.Combine(Path.GetTempPath(), "ClickyClone.Tests", Guid.NewGuid().ToString("N"), "settings.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+    File.WriteAllText(settingsPath, """{"workerBaseUrl":"https://old.example.workers.dev/","useDeveloperWorker":false}""");
+
+    var loaded = new AppSettingsStore(settingsPath).Load();
+    AssertStringEqual("worker", loaded.BackendMode, "backend mode");
+    AssertStringEqual("https://old.example.workers.dev/", loaded.WorkerBaseUrl ?? "", "worker url");
+}
+
+static void ParsesLocalEnv()
+{
+    var values = LocalEnv.Parse([
+        "# comment",
+        "OPENAI_API_KEY = sk-test",
+        "ASSEMBLYAI_API_KEY=",
+        "ELEVENLABS_VOICE_ID='voice-id'",
+        "OPENAI_MODEL=\"gpt-test\""
+    ]);
+
+    AssertStringEqual("sk-test", values["OPENAI_API_KEY"], "openai key");
+    AssertStringEqual("", values["ASSEMBLYAI_API_KEY"], "blank assemblyai key");
+    AssertStringEqual("voice-id", values["ELEVENLABS_VOICE_ID"], "voice id");
+    AssertStringEqual("gpt-test", values["OPENAI_MODEL"], "openai model");
+}
+
+static async Task LocalDiagnosticsReportsBooleans()
+{
+    var envPath = Path.Combine(Path.GetTempPath(), "ClickyClone.Tests", Guid.NewGuid().ToString("N"), ".env");
+    LocalEnv.Save(envPath, "sk-test", "assembly-test", "eleven-test", "voice-test");
+    var client = new LocalProviderClient(envPath);
+    var diagnostics = await client.GetDiagnosticsAsync(CancellationToken.None);
+
+    Assert(diagnostics.Secrets is { OpenAI: true, AssemblyAI: true, ElevenLabs: true, ElevenLabsVoice: true });
+    AssertStringEqual("openai-computer-use", diagnostics.Locator?.Provider ?? "", "locator provider");
+    AssertStringEqual(LocalEnv.DefaultOpenAIComputerModel, diagnostics.Locator?.Model ?? "", "locator model");
+}
+
+static void ExtractsLocalComputerUsePoint()
+{
+    using var document = JsonDocument.Parse("""
+    {
+      "output": [
+        {
+          "type": "computer_call",
+          "action": { "type": "click", "x": 125.4, "y": 99.6 }
+        }
+      ]
+    }
+    """);
+    var capture = Capture(screenNumber: 1, isCursorScreen: true, left: 0, top: 0, displayWidth: 1000, displayHeight: 800, shotWidth: 500, shotHeight: 400);
+
+    var point = LocalProviderClient.ExtractComputerUsePointForTest(document.RootElement, "openai-computer-use", "Generate Mesh", capture);
+    Assert(point is not null);
+    AssertEqual(125, point!.X, "x");
+    AssertEqual(100, point.Y, "y");
+    AssertStringEqual("computer-use", point.Source ?? "", "source");
+}
+
+static void RoutesGuidanceRequestsWithOptionalPointing()
+{
+    Assert(InvokeCompanionBool("ShouldAttemptPointing", "show me how to add a Python animation"));
+    Assert(InvokeCompanionBool("ShouldAttemptPointing", "how can I see solution information"));
+    Assert(!InvokeCompanionBool("IsDirectPointingRequest", "show me how to add a Python animation"));
+    Assert(InvokeCompanionBool("IsDirectPointingRequest", "point to solution information"));
+    Assert(!InvokeCompanionBool("ShouldAttemptPointing", "explain what this error means"));
+}
+
+static bool InvokeCompanionBool(string methodName, string transcript)
+{
+    var method = typeof(CompanionManager).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static)
+                 ?? throw new InvalidOperationException($"Missing method {methodName}.");
+    return (bool)(method.Invoke(null, [transcript]) ?? false);
+}
+
+static void ParsesWranglerWorkerUrl()
+{
+    const string output = "Uploaded pointerai-test\nDeployed pointerai-test triggers\nhttps://pointerai-test.example.workers.dev";
+    var workerUrl = WorkerSetupRunner.TryExtractWorkerUrl(output);
+    AssertStringEqual("https://pointerai-test.example.workers.dev", workerUrl ?? "", "worker url");
+}
 
 static void MapsCursorScreenPoint()
 {

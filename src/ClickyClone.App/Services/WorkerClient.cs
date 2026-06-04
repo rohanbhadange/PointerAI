@@ -6,7 +6,7 @@ using ClickyClone.Core;
 
 namespace ClickyClone.Services;
 
-public sealed class WorkerClient
+public sealed class WorkerClient : IBackendClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,6 +33,18 @@ public sealed class WorkerClient
         using var response = await httpClient.GetAsync(new Uri(baseUri, "/health"), cancellationToken);
         AppLogger.Info($"Worker /health response. Status={(int)response.StatusCode}");
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<WorkerDiagnostics> GetDiagnosticsAsync(CancellationToken cancellationToken)
+    {
+        AppLogger.Info("Worker /diagnostics request started.");
+        using var response = await httpClient.GetAsync(new Uri(baseUri, "/diagnostics"), cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        AppLogger.Info($"Worker /diagnostics response. Status={(int)response.StatusCode} BodyLength={body.Length}");
+        response.EnsureSuccessStatusCode();
+
+        return JsonSerializer.Deserialize<WorkerDiagnostics>(body, JsonOptions)
+               ?? throw new InvalidOperationException("Worker diagnostics response could not be parsed.");
     }
 
     public async Task<bool> CheckPointingSelfTestAsync(CancellationToken cancellationToken)

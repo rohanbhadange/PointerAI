@@ -20,6 +20,10 @@ export default {
         return jsonResponse({ ok: true, service: "clickyclone-worker" });
       }
 
+      if (url.pathname === "/diagnostics") {
+        return handleDiagnostics(env);
+      }
+
       if (url.pathname === "/pointing-self-test") {
         return handlePointingSelfTest();
       }
@@ -55,6 +59,26 @@ export default {
     }
   },
 };
+
+function handleDiagnostics(env) {
+  return jsonResponse({
+    ok: true,
+    service: "clickyclone-worker",
+    secrets: {
+      openAI: Boolean(env.OPENAI_API_KEY),
+      assemblyAI: Boolean(env.ASSEMBLYAI_API_KEY),
+      elevenLabs: Boolean(env.ELEVENLABS_API_KEY),
+      elevenLabsVoice: Boolean(env.ELEVENLABS_VOICE_ID),
+    },
+    locator: {
+      provider: env.LOCATOR_PROVIDER || "openai-computer-use",
+      model: env.OPENAI_COMPUTER_MODEL || OPENAI_COMPUTER_MODEL,
+    },
+    chat: {
+      model: env.OPENAI_MODEL || OPENAI_MODEL,
+    },
+  });
+}
 
 async function handleLocate(request, env) {
   const body = await request.json();

@@ -92,6 +92,22 @@ try {
   assertEqual(321.5, selfTestJson.point.x, "selfTest.point.x");
   assertEqual(22.25, selfTestJson.point.y, "selfTest.point.y");
 
+  const diagnosticsResponse = await worker.fetch(new Request("https://example.test/diagnostics"), {
+    OPENAI_API_KEY: "test-openai-key",
+    ASSEMBLYAI_API_KEY: "test-assemblyai-key",
+    ELEVENLABS_API_KEY: "test-elevenlabs-key",
+    ELEVENLABS_VOICE_ID: "test-voice-id",
+  });
+  const diagnosticsJson = await diagnosticsResponse.json();
+
+  assertEqual(200, diagnosticsResponse.status, "diagnostics.status");
+  assertEqual(true, diagnosticsJson.ok, "diagnostics.ok");
+  assertEqual(true, diagnosticsJson.secrets.openAI, "diagnostics.secrets.openAI");
+  assertEqual(true, diagnosticsJson.secrets.assemblyAI, "diagnostics.secrets.assemblyAI");
+  assertEqual(true, diagnosticsJson.secrets.elevenLabs, "diagnostics.secrets.elevenLabs");
+  assertEqual(true, diagnosticsJson.secrets.elevenLabsVoice, "diagnostics.secrets.elevenLabsVoice");
+  assertEqual("openai-computer-use", diagnosticsJson.locator.provider, "diagnostics.locator.provider");
+
   const request = new Request("https://example.test/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },

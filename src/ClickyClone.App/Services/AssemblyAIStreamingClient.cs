@@ -7,7 +7,7 @@ namespace ClickyClone.Services;
 
 public sealed class AssemblyAIStreamingClient : IDisposable
 {
-    private readonly WorkerClient workerClient;
+    private readonly IBackendClient backendClient;
     private readonly object transcriptLock = new();
     private readonly Dictionary<int, string> committedTurns = [];
     private ClientWebSocket? webSocket;
@@ -18,9 +18,9 @@ public sealed class AssemblyAIStreamingClient : IDisposable
     private string activeTurnText = "";
     private bool isFinalizing;
 
-    public AssemblyAIStreamingClient(WorkerClient workerClient)
+    public AssemblyAIStreamingClient(IBackendClient backendClient)
     {
-        this.workerClient = workerClient;
+        this.backendClient = backendClient;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -28,7 +28,7 @@ public sealed class AssemblyAIStreamingClient : IDisposable
         Cancel();
         AppLogger.Info("AssemblyAI streaming start requested.");
 
-        var token = await workerClient.GetAssemblyAITokenAsync(cancellationToken);
+        var token = await backendClient.GetAssemblyAITokenAsync(cancellationToken);
         var websocketUri = new Uri(
             "wss://streaming.assemblyai.com/v3/ws" +
             "?sample_rate=16000" +

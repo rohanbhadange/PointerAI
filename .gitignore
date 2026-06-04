@@ -4,6 +4,8 @@ obj/
 artifacts/
 
 # Local runtime and tool state
+.env
+.env.local
 .appdata/
 .dotnet/
 .dotnet-home/

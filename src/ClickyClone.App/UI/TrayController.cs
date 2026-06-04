@@ -12,12 +12,14 @@ namespace ClickyClone.UI;
 public sealed class TrayController : IDisposable
 {
     private readonly CompanionManager companionManager;
+    private readonly Action? openSetup;
     private readonly NotifyIcon notifyIcon;
     private CompanionPanelWindow? panelWindow;
 
-    public TrayController(CompanionManager companionManager)
+    public TrayController(CompanionManager companionManager, Action? openSetup = null)
     {
         this.companionManager = companionManager;
+        this.openSetup = openSetup;
         notifyIcon = new NotifyIcon
         {
             Icon = CreateTrayIcon(),
@@ -59,6 +61,7 @@ public sealed class TrayController : IDisposable
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open status", null, (_, _) => ShowPanel());
+        menu.Items.Add("Setup", null, (_, _) => openSetup?.Invoke());
         menu.Items.Add("Open log", null, (_, _) => OpenLog());
         menu.Items.Add("Quit", null, (_, _) => companionManager.Quit());
         return menu;

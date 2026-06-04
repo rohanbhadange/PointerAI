@@ -11,7 +11,7 @@ namespace ClickyClone.Core;
 
 public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
 {
-    private readonly WorkerClient workerClient;
+    private readonly IBackendClient backendClient;
     private readonly OverlayManager overlayManager;
     private readonly AudioRecorder audioRecorder;
     private readonly AssemblyAIStreamingClient transcriptionClient;
@@ -24,7 +24,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
     private static readonly Regex WordRegex = new("[a-z0-9]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly HashSet<string> PointingIntentWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "click", "find", "locate", "open", "point", "press", "select", "show", "where"
+        "click", "find", "locate", "open", "point", "press", "select"
     };
     private static readonly HashSet<string> CatalogDiagnosticStopWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -68,7 +68,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
     }
 
     public CompanionManager(
-        WorkerClient workerClient,
+        IBackendClient backendClient,
         OverlayManager overlayManager,
         AudioRecorder audioRecorder,
         AssemblyAIStreamingClient transcriptionClient,
@@ -76,7 +76,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         TextToSpeechPlayer textToSpeechPlayer,
         GlobalPushToTalkMonitor hotkeyMonitor)
     {
-        this.workerClient = workerClient;
+        this.backendClient = backendClient;
         this.overlayManager = overlayManager;
         this.audioRecorder = audioRecorder;
         this.transcriptionClient = transcriptionClient;
@@ -99,8 +99,8 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
     {
         try
         {
-            await workerClient.CheckHealthAsync(CancellationToken.None);
-            var hasExactPointingSupport = await workerClient.CheckPointingSelfTestAsync(CancellationToken.None);
+            await backendClient.CheckHealthAsync(CancellationToken.None);
+            var hasExactPointingSupport = await backendClient.CheckPointingSelfTestAsync(CancellationToken.None);
             if (!hasExactPointingSupport)
             {
                 AppLogger.Info("Worker exact pointing support is not available. Redeploy worker/clickyclone-worker.js before judging pointing accuracy.");
@@ -226,7 +226,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
 
             var captureTask = CaptureScreensForInteractionAsync(cancellationToken);
             var transcribeStopwatch = Stopwatch.StartNew();
-            var transcript = await workerClient.TranscribeAudioAsync(wavBytes, cancellationToken);
+            var transcript = await backendClient.TranscribeAudioAsync(wavBytes, cancellationToken);
             AppLogger.Info($"PERF stage=transcription_total ms={transcribeStopwatch.ElapsedMilliseconds}");
             AppLogger.Info($"Transcript finalized. Length={transcript.Length}");
 
@@ -302,18 +302,19 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
             Status = new CompanionStatus(CompanionVoiceState.Processing, "Thinking", LastTranscript: transcript);
         });
 
-        var isPointingRequest = IsPointingRequest(transcript);
-        AppLogger.Info($"Pointing intent. IsPointingRequest={isPointingRequest} Provider={LocatorProvider}");
+        var shouldAttemptPointing = ShouldAttemptPointing(transcript);
+        var isDirectPointingRequest = IsDirectPointingRequest(transcript);
+        AppLogger.Info($"Pointing intent. ShouldAttemptPointing={shouldAttemptPointing} IsDirectPointingRequest={isDirectPointingRequest} Provider={LocatorProvider}");
         LogElementCatalogDiagnostics(transcript, captures);
 
         Task<LocateResponse>? locateTask = null;
         ScreenCapturePayload? locateCapture = null;
-        if (isPointingRequest)
+        if (shouldAttemptPointing)
         {
             locateCapture = SelectLocateCapture(captures);
             if (locateCapture is not null)
             {
-                locateTask = workerClient.LocateAsync(transcript, locateCapture, LocatorProvider, cancellationToken);
+                locateTask = backendClient.LocateAsync(transcript, locateCapture, LocatorProvider, cancellationToken);
             }
             else
             {
@@ -322,7 +323,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         }
 
         string spokenText;
-        if (isPointingRequest)
+        if (isDirectPointingRequest)
         {
             // Pointing turns use /locate as the authoritative coordinate source.
             AppLogger.Info("Skipping /chat for pointing request; locator is authoritative.");
@@ -331,7 +332,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         else
         {
             var chatStopwatch = Stopwatch.StartNew();
-            var chatResponse = await workerClient.SendChatAsync(
+            var chatResponse = await backendClient.SendChatAsync(
                 transcript,
                 captures,
                 conversationHistory,
@@ -362,7 +363,7 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
             }
         }
 
-        if (isPointingRequest)
+        if (isDirectPointingRequest)
         {
             spokenText = point is not null
                 ? "I'll point to it."
@@ -434,8 +435,40 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
         return Application.Current.Dispatcher.InvokeAsync(action).Task;
     }
 
-    private static bool IsPointingRequest(string transcript)
+    private static bool ShouldAttemptPointing(string transcript)
     {
+        var normalized = transcript.Trim().ToLowerInvariant();
+        if (normalized.StartsWith("what ", StringComparison.Ordinal) ||
+            normalized.StartsWith("why ", StringComparison.Ordinal) ||
+            normalized.StartsWith("tell me ", StringComparison.Ordinal) ||
+            normalized.StartsWith("explain ", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalized.StartsWith("how ", StringComparison.Ordinal) ||
+            normalized.StartsWith("how do ", StringComparison.Ordinal) ||
+            normalized.StartsWith("how can ", StringComparison.Ordinal) ||
+            normalized.Contains("show me", StringComparison.Ordinal) ||
+            normalized.Contains("can you see", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return IsDirectPointingRequest(transcript);
+    }
+
+    private static bool IsDirectPointingRequest(string transcript)
+    {
+        var normalized = transcript.Trim().ToLowerInvariant();
+        if (normalized.Contains("where is", StringComparison.Ordinal) ||
+            normalized.Contains("where's", StringComparison.Ordinal) ||
+            normalized.Contains("point to", StringComparison.Ordinal) ||
+            normalized.Contains("show me where", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         foreach (Match match in WordRegex.Matches(transcript))
         {
             if (PointingIntentWords.Contains(match.Value))

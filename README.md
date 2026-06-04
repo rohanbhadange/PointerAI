@@ -1,14 +1,62 @@
 # PointerAI
 
-Windows desktop clone of Clicky. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sends screen context to a Cloudflare Worker, speaks responses with ElevenLabs, and shows a blue cursor overlay that can point at UI elements.
+Windows desktop clone of Clicky. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sees the screen, speaks responses, and can point the cursor buddy at UI elements.
+
+## Choose One Setup Path
+
+PointerAI can run with local keys on your computer or through your own Cloudflare Worker.
+
+### Option A: Local keys
+
+This is the lowest-friction path and does not require Cloudflare.
+
+1. Launch `ClickyClone.exe`.
+2. Choose **Use local keys on this computer**.
+3. Paste:
+   - `OPENAI_API_KEY`
+   - `ASSEMBLYAI_API_KEY`
+   - `ELEVENLABS_API_KEY`
+   - `ELEVENLABS_VOICE_ID`
+4. The app creates a local `.env` next to `ClickyClone.exe`.
+
+Real `.env` files are ignored by Git. `.env.example` is included as a template only.
+
+### Option B: Cloudflare Worker
+
+Use this if you want provider keys stored as Cloudflare Worker secrets instead of in a local `.env`.
+
+1. Install Node.js.
+2. From this repo, run:
+
+```powershell
+.\scripts\setup-worker.ps1
+```
+
+3. Copy the `workers.dev` URL printed by Wrangler.
+4. Open the Worker in the Cloudflare dashboard.
+5. Add these Worker secrets:
+   - `OPENAI_API_KEY`
+   - `ASSEMBLYAI_API_KEY`
+   - `ELEVENLABS_API_KEY`
+   - `ELEVENLABS_VOICE_ID`
+6. Launch `ClickyClone.exe`.
+7. Choose **Use a Cloudflare Worker URL** and paste the Worker URL.
+
+The app validates `/health` and `/diagnostics` before saving the Worker URL.
+
+To check the Worker script setup without deploying:
+
+```powershell
+.\scripts\setup-worker.ps1 -DryRun
+```
 
 ## Requirements
 
+- Windows 10/11
 - .NET SDK 8.0 or newer for building
 - .NET Desktop Runtime 8.0 or newer for running the framework-dependent installer build
-- Windows 10/11
-- A deployed Cloudflare Worker at `https://clickyclone.rohanbhadange18.workers.dev`
-- Worker secrets configured for OpenAI, AssemblyAI, and ElevenLabs
+- Provider keys for OpenAI, AssemblyAI, and ElevenLabs
+- Node.js only if using the Cloudflare Worker setup path
 
 ## Build
 
@@ -16,20 +64,20 @@ Windows desktop clone of Clicky. It runs as a tray-only app, uses `Ctrl+Alt` pus
 .\scripts\build.ps1
 ```
 
-## Production Diagnostics
-
-Runs live checks against the deployed Worker, including `/health`, `/transcribe-token`, `/tts`, and `/chat` with a real screenshot.
-
-```powershell
-.\scripts\run-worker-diagnostics.ps1
-```
-
 ## Local Simulations
 
-Runs deterministic local checks for coordinate mapping and multi-monitor edge cases.
+Runs deterministic local checks for coordinate mapping, setup parsing, and multi-monitor edge cases.
 
 ```powershell
 .\scripts\run-local-simulations.ps1
+```
+
+## Production Diagnostics
+
+Runs live checks against the configured Worker, including `/health`, `/transcribe-token`, `/tts`, and `/chat` with a real screenshot.
+
+```powershell
+.\scripts\run-worker-diagnostics.ps1
 ```
 
 ## Installer
