@@ -11,6 +11,7 @@ public partial class App : System.Windows.Application
     private TrayController? trayController;
     private CompanionManager? companionManager;
     private AppSettingsStore? settingsStore;
+    private UpdateService? updateService;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -31,6 +32,7 @@ public partial class App : System.Windows.Application
         };
 
         settingsStore = new AppSettingsStore();
+        updateService = new UpdateService();
         var backendClient = ResolveBackendClient(settingsStore);
         if (backendClient is null)
         {
@@ -54,8 +56,9 @@ public partial class App : System.Windows.Application
             textToSpeechPlayer,
             hotkeyMonitor);
 
-        trayController = new TrayController(companionManager, OpenSetupFromTray);
+        trayController = new TrayController(companionManager, OpenSetupFromTray, CheckForUpdatesFromTrayAsync);
         companionManager.Start();
+        _ = CheckForUpdatesOnStartupAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -191,10 +194,111 @@ public partial class App : System.Windows.Application
         if (setupWindow.ShowDialog() == true)
         {
             System.Windows.MessageBox.Show(
-                "Worker setup was updated. Restart ClickyClone to use the new Worker.",
+                "Setup was updated. Restart ClickyClone to use the new setup path.",
                 "ClickyClone setup",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
+    }
+
+    private async Task CheckForUpdatesFromTrayAsync()
+    {
+        await CheckForUpdatesAsync(userInitiated: true);
+    }
+
+    private async Task CheckForUpdatesOnStartupAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8));
+            await CheckForUpdatesAsync(userInitiated: false);
+        }
+        catch (Exception error)
+        {
+            AppLogger.Error("Startup update check failed", error);
+        }
+    }
+
+    private async Task CheckForUpdatesAsync(bool userInitiated)
+    {
+        var service = updateService;
+        var store = settingsStore;
+        if (service is null || store is null)
+        {
+            return;
+        }
+
+        var settings = store.Load();
+        var result = await service.CheckForUpdatesAsync(CancellationToken.None);
+        if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            if (userInitiated)
+            {
+                await Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(
+                    result.Error,
+                    "Update check failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning));
+            }
+
+            return;
+        }
+
+        if (!result.UpdateAvailable)
+        {
+            if (userInitiated)
+            {
+                await Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(
+                    $"ClickyClone is up to date. Current version: {result.CurrentVersion}.",
+                    "No update available",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information));
+            }
+
+            return;
+        }
+
+        var message = BuildUpdatePrompt(result, settings);
+        var shouldUpdate = await Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(
+            message,
+            "ClickyClone update available",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information));
+
+        if (shouldUpdate != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(
+                "ClickyClone will download the update now. The app will close when the installer starts.",
+                "Downloading update",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information));
+
+            var installerPath = await service.DownloadInstallerAsync(result, null, CancellationToken.None);
+            service.LaunchInstaller(installerPath);
+            Shutdown();
+        }
+        catch (Exception error)
+        {
+            AppLogger.Error("Update install failed", error);
+            await Dispatcher.InvokeAsync(() => System.Windows.MessageBox.Show(
+                $"The update could not be installed automatically. You can download it from {result.ReleasePageUrl ?? AppConfig.GitHubReleasesUri.ToString()}.\n\n{error.Message}",
+                "Update failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning));
+        }
+    }
+
+    private static string BuildUpdatePrompt(UpdateCheckResult result, AppSettings settings)
+    {
+        var setupNote = string.Equals(settings.BackendMode, "local", StringComparison.OrdinalIgnoreCase)
+            ? "Your local .env keys will stay in place."
+            : "Your Worker URL will stay in place. If this release includes Worker changes, the app may ask you to redeploy your Worker after updating.";
+
+        return $"Version {result.LatestVersion} is available. You are running {result.CurrentVersion}.\n\n{setupNote}\n\nUpdate now?";
     }
 }

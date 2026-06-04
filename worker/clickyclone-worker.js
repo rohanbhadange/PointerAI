@@ -7,6 +7,7 @@ const CORS_HEADERS = {
 const OPENAI_MODEL = "gpt-4.1-mini";
 const OPENAI_COMPUTER_MODEL = "gpt-5.5";
 const ELEVENLABS_MODEL = "eleven_flash_v2_5";
+const WORKER_VERSION = "1.0.0";
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -64,6 +65,7 @@ function handleDiagnostics(env) {
   return jsonResponse({
     ok: true,
     service: "clickyclone-worker",
+    workerVersion: WORKER_VERSION,
     secrets: {
       openAI: Boolean(env.OPENAI_API_KEY),
       assemblyAI: Boolean(env.ASSEMBLYAI_API_KEY),

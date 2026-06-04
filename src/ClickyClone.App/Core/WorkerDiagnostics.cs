@@ -3,6 +3,7 @@ namespace ClickyClone.Core;
 public sealed record WorkerDiagnostics(
     bool Ok,
     string? Service,
+    string? WorkerVersion,
     WorkerSecretDiagnostics? Secrets,
     WorkerLocatorDiagnostics? Locator,
     WorkerChatDiagnostics? Chat);

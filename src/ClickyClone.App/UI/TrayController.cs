@@ -13,13 +13,18 @@ public sealed class TrayController : IDisposable
 {
     private readonly CompanionManager companionManager;
     private readonly Action? openSetup;
+    private readonly Func<Task>? checkForUpdates;
     private readonly NotifyIcon notifyIcon;
     private CompanionPanelWindow? panelWindow;
 
-    public TrayController(CompanionManager companionManager, Action? openSetup = null)
+    public TrayController(
+        CompanionManager companionManager,
+        Action? openSetup = null,
+        Func<Task>? checkForUpdates = null)
     {
         this.companionManager = companionManager;
         this.openSetup = openSetup;
+        this.checkForUpdates = checkForUpdates;
         notifyIcon = new NotifyIcon
         {
             Icon = CreateTrayIcon(),
@@ -62,9 +67,27 @@ public sealed class TrayController : IDisposable
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open status", null, (_, _) => ShowPanel());
         menu.Items.Add("Setup", null, (_, _) => openSetup?.Invoke());
+        menu.Items.Add("Check for updates", null, async (_, _) => await CheckForUpdatesAsync());
         menu.Items.Add("Open log", null, (_, _) => OpenLog());
         menu.Items.Add("Quit", null, (_, _) => companionManager.Quit());
         return menu;
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (checkForUpdates is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await checkForUpdates();
+        }
+        catch (Exception error)
+        {
+            AppLogger.Error("Manual update check failed", error);
+        }
     }
 
     private static void OpenLog()

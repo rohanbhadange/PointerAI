@@ -8,6 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ClickyClone</AssemblyName>
     <RootNamespace>ClickyClone</RootNamespace>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 

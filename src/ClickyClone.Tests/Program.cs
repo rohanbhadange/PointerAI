@@ -12,6 +12,7 @@ Run("parses local env", ParsesLocalEnv);
 await RunAsync("local diagnostics reports booleans", LocalDiagnosticsReportsBooleans);
 Run("extracts local computer-use point", ExtractsLocalComputerUsePoint);
 Run("routes guidance requests with optional pointing", RoutesGuidanceRequestsWithOptionalPointing);
+Run("compares update versions", ComparesUpdateVersions);
 Run("parses wrangler worker url", ParsesWranglerWorkerUrl);
 Run("maps cursor-screen point", MapsCursorScreenPoint);
 Run("maps explicit secondary screen with negative coordinates", MapsExplicitSecondaryScreenWithNegativeCoordinates);
@@ -116,6 +117,14 @@ static void RoutesGuidanceRequestsWithOptionalPointing()
     Assert(!InvokeCompanionBool("IsDirectPointingRequest", "show me how to add a Python animation"));
     Assert(InvokeCompanionBool("IsDirectPointingRequest", "point to solution information"));
     Assert(!InvokeCompanionBool("ShouldAttemptPointing", "explain what this error means"));
+}
+
+static void ComparesUpdateVersions()
+{
+    Assert(UpdateService.IsNewerVersion("v1.0.1", "1.0.0"));
+    Assert(UpdateService.IsNewerVersion("1.1.0", "1.0.9"));
+    Assert(!UpdateService.IsNewerVersion("1.0.0", "1.0.0"));
+    Assert(!UpdateService.IsNewerVersion("not-a-version", "1.0.0"));
 }
 
 static bool InvokeCompanionBool(string methodName, string transcript)

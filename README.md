@@ -89,3 +89,23 @@ Install Inno Setup, then compile:
 ```
 
 The installer output is written to `artifacts\installer`.
+
+## Updates
+
+Installed apps check GitHub Releases for new versions in the background. Users can also right-click the tray icon and choose **Check for updates**.
+
+- Local keys users keep their installed `.env` through app updates.
+- Worker users keep their Worker URL through app updates.
+- If a release changes Worker code, Worker users may need to rerun:
+
+```powershell
+.\scripts\setup-worker.ps1
+```
+
+To package release artifacts locally:
+
+```powershell
+.\scripts\build-release.ps1
+```
+
+Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploads `ClickyCloneSetup.exe`, which the app uses for automatic updates.

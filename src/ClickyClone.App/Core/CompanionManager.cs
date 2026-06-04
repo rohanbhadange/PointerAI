@@ -105,6 +105,14 @@ public sealed class CompanionManager : INotifyPropertyChanged, IDisposable
             {
                 AppLogger.Info("Worker exact pointing support is not available. Redeploy worker/clickyclone-worker.js before judging pointing accuracy.");
             }
+
+            var diagnostics = await backendClient.GetDiagnosticsAsync(CancellationToken.None);
+            if (string.Equals(diagnostics.Service, "clickyclone-worker", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(diagnostics.WorkerVersion, AppConfig.WorkerVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Info($"Worker update recommended. WorkerVersion={diagnostics.WorkerVersion ?? "unknown"} AppWorkerVersion={AppConfig.WorkerVersion}");
+                Status = Status with { StatusText = "Worker update recommended" };
+            }
         }
         catch (Exception error)
         {

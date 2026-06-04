@@ -46,6 +46,7 @@ public sealed class LocalProviderClient : IBackendClient
         return Task.FromResult(new WorkerDiagnostics(
             true,
             "clickyclone-local",
+            AppConfig.AppVersion,
             new WorkerSecretDiagnostics(
                 !string.IsNullOrWhiteSpace(env.OpenAIKey),
                 !string.IsNullOrWhiteSpace(env.AssemblyAIKey),

@@ -106,6 +106,7 @@ try {
   assertEqual(true, diagnosticsJson.secrets.assemblyAI, "diagnostics.secrets.assemblyAI");
   assertEqual(true, diagnosticsJson.secrets.elevenLabs, "diagnostics.secrets.elevenLabs");
   assertEqual(true, diagnosticsJson.secrets.elevenLabsVoice, "diagnostics.secrets.elevenLabsVoice");
+  assertEqual("1.0.0", diagnosticsJson.workerVersion, "diagnostics.workerVersion");
   assertEqual("openai-computer-use", diagnosticsJson.locator.provider, "diagnostics.locator.provider");
 
   const request = new Request("https://example.test/chat", {
