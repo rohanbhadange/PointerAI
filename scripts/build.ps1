@@ -4,10 +4,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot "src\ClickyClone.App\ClickyClone.App.csproj"
-$diagnosticsProjectPath = Join-Path $repoRoot "src\ClickyClone.Diagnostics\ClickyClone.Diagnostics.csproj"
-$testsProjectPath = Join-Path $repoRoot "src\ClickyClone.Tests\ClickyClone.Tests.csproj"
-$publishDir = Join-Path $repoRoot "artifacts\publish\ClickyClone"
+$projectPath = Join-Path $repoRoot "src\Nudge.App\Nudge.App.csproj"
+$diagnosticsProjectPath = Join-Path $repoRoot "src\Nudge.Diagnostics\Nudge.Diagnostics.csproj"
+$testsProjectPath = Join-Path $repoRoot "src\Nudge.Tests\Nudge.Tests.csproj"
+$publishDir = Join-Path $repoRoot "artifacts\publish\Nudge"
 $localDotnet = Join-Path $repoRoot ".dotnet\dotnet.exe"
 $dotnetCommand = if (Test-Path -LiteralPath $localDotnet) {
     $localDotnet
@@ -39,7 +39,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME, $env:NUGET_PACKAGES, $env:TEMP, $env:APPDATA, $env:LOCALAPPDATA | Out-Null
 
-    node --check (Join-Path $repoRoot "worker\clickyclone-worker.js")
+    node --check (Join-Path $repoRoot "worker\nudge-worker.js")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     node (Join-Path $repoRoot "scripts\test-worker-pointing.mjs")
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -55,7 +55,7 @@ try {
     & $dotnetCommand publish $projectPath -c $Configuration --self-contained false -o $publishDir
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    Write-Host "Published ClickyClone to $publishDir"
+    Write-Host "Published Nudge to $publishDir"
 } finally {
     foreach ($name in $envNamesToRestore) {
         [Environment]::SetEnvironmentVariable($name, $oldEnv[$name], "Process")

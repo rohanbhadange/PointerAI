@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$installerScript = Join-Path $repoRoot "installer\ClickyClone.iss"
-$publishExe = Join-Path $repoRoot "artifacts\publish\ClickyClone\ClickyClone.exe"
+$installerScript = Join-Path $repoRoot "installer\Nudge.iss"
+$publishExe = Join-Path $repoRoot "artifacts\publish\Nudge\Nudge.exe"
 
 if (!(Test-Path $publishExe)) {
     throw "Published app not found at $publishExe. Run .\scripts\build.ps1 first."

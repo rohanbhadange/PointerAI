@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$testsProjectPath = Join-Path $repoRoot "src\ClickyClone.Tests\ClickyClone.Tests.csproj"
+$testsProjectPath = Join-Path $repoRoot "src\Nudge.Tests\Nudge.Tests.csproj"
 
 $env:DOTNET_CLI_HOME = Join-Path $repoRoot ".dotnet-home"
 $env:NUGET_PACKAGES = Join-Path $repoRoot ".nuget\packages"

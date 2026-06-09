@@ -1,23 +1,23 @@
-# PointerAI
+# Nudge
 
-Windows desktop clone of Clicky. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sees the screen, speaks responses, and can point the cursor buddy at UI elements.
+Windows desktop companion. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sees the screen, speaks responses, and can point the cursor buddy at UI elements.
 
 ## Choose One Setup Path
 
-PointerAI can run with local keys on your computer or through your own Cloudflare Worker.
+Nudge can run with local keys on your computer or through your own Cloudflare Worker.
 
 ### Option A: Local keys
 
 This is the lowest-friction path and does not require Cloudflare.
 
-1. Launch `ClickyClone.exe`.
+1. Launch `Nudge.exe`.
 2. Choose **Use local keys on this computer**.
 3. Paste:
    - `OPENAI_API_KEY`
    - `ASSEMBLYAI_API_KEY`
    - `ELEVENLABS_API_KEY`
    - `ELEVENLABS_VOICE_ID`
-4. The app creates a local `.env` next to `ClickyClone.exe`.
+4. The app creates a local `.env` next to `Nudge.exe`.
 
 Real `.env` files are ignored by Git. `.env.example` is included as a template only.
 
@@ -39,7 +39,7 @@ Use this if you want provider keys stored as Cloudflare Worker secrets instead o
    - `ASSEMBLYAI_API_KEY`
    - `ELEVENLABS_API_KEY`
    - `ELEVENLABS_VOICE_ID`
-6. Launch `ClickyClone.exe`.
+6. Launch `Nudge.exe`.
 7. Choose **Use a Cloudflare Worker URL** and paste the Worker URL.
 
 The app validates `/health` and `/diagnostics` before saving the Worker URL.
@@ -108,7 +108,7 @@ To package release artifacts locally:
 .\scripts\build-release.ps1
 ```
 
-Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploads `ClickyCloneSetup.exe`, which the app uses for automatic updates.
+Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploads `NudgeSetup.exe`, which the app uses for automatic updates.
 
 ## Landing Page
 

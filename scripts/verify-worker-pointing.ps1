@@ -1,5 +1,5 @@
 param(
-    [string]$WorkerUrl = "https://clickyclone.rohanbhadange18.workers.dev"
+    [string]$WorkerUrl = "https://nudge.rohanbhadange18.workers.dev"
 )
 
 $ErrorActionPreference = "Stop"

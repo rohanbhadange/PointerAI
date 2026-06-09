@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$logPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "ClickyClone\clickyclone.log"
+$logPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Nudge\nudge.log"
 if (!(Test-Path -LiteralPath $logPath)) {
-    throw "ClickyClone log was not found at $logPath"
+    throw "Nudge log was not found at $logPath"
 }
 
 $entries = Get-Content -LiteralPath $logPath -Tail 500 |

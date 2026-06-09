@@ -2,13 +2,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const workerBaseUrl = "https://clickyclone.rohanbhadange18.workers.dev";
+const workerBaseUrl = "https://nudge.rohanbhadange18.workers.dev";
 const artifactDir = join(process.cwd(), "artifacts", "diagnostics");
 const screenshotPath = join(artifactDir, "primary-screen.jpg");
 
 mkdirSync(artifactDir, { recursive: true });
 
-console.log("ClickyClone Worker diagnostics");
+console.log("Nudge Worker diagnostics");
 console.log(`Worker: ${workerBaseUrl}`);
 
 await checkHealth();

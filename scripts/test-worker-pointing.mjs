@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const workerPath = path.join(repoRoot, "worker", "clickyclone-worker.js");
+const workerPath = path.join(repoRoot, "worker", "nudge-worker.js");
 const workerSource = await fs.readFile(workerPath, "utf8");
 const workerFactorySource = `${workerSource.replace("export default", "const workerDefault =")}\nreturn workerDefault;`;
 const worker = new Function(workerFactorySource)();

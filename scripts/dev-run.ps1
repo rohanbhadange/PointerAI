@@ -4,12 +4,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$exePath = Join-Path $repoRoot "artifacts\publish\ClickyClone\ClickyClone.exe"
+$exePath = Join-Path $repoRoot "artifacts\publish\Nudge\Nudge.exe"
 $realLocalAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
 $realAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
-$logPath = Join-Path $realLocalAppData "ClickyClone\clickyclone.log"
+$logPath = Join-Path $realLocalAppData "Nudge\nudge.log"
 
-Get-Process ClickyClone -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process Nudge -ErrorAction SilentlyContinue | Stop-Process -Force
 
 if (!$NoBuild) {
     & (Join-Path $PSScriptRoot "build.ps1")
@@ -23,5 +23,5 @@ $env:LOCALAPPDATA = $realLocalAppData
 $env:APPDATA = $realAppData
 Start-Process -FilePath $exePath
 
-Write-Host "ClickyClone launched from: $exePath"
+Write-Host "Nudge launched from: $exePath"
 Write-Host "Runtime log: $logPath"

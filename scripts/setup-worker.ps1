@@ -55,9 +55,9 @@ function Invoke-Checked {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$workerSource = Join-Path $repoRoot "worker\clickyclone-worker.js"
+$workerSource = Join-Path $repoRoot "worker\nudge-worker.js"
 if ([string]::IsNullOrWhiteSpace($DeployRoot)) {
-    $DeployRoot = Join-Path $env:LOCALAPPDATA "ClickyClone\worker-deploy"
+    $DeployRoot = Join-Path $env:LOCALAPPDATA "Nudge\worker-deploy"
 }
 
 Write-Step "Checking tools"
@@ -74,13 +74,13 @@ if (-not (Test-Path $workerSource)) {
 }
 
 New-Item -ItemType Directory -Path $DeployRoot -Force | Out-Null
-Copy-Item -LiteralPath $workerSource -Destination (Join-Path $DeployRoot "clickyclone-worker.js") -Force
+Copy-Item -LiteralPath $workerSource -Destination (Join-Path $DeployRoot "nudge-worker.js") -Force
 
-$workerName = "pointerai-" + ([Guid]::NewGuid().ToString("N").Substring(0, 8))
+$workerName = "nudge-" + ([Guid]::NewGuid().ToString("N").Substring(0, 8))
 $wranglerConfig = @"
 {
   "name": "$workerName",
-  "main": "clickyclone-worker.js",
+  "main": "nudge-worker.js",
   "compatibility_date": "2025-01-01"
 }
 "@
@@ -118,4 +118,4 @@ Write-Host "   OPENAI_API_KEY"
 Write-Host "   ASSEMBLYAI_API_KEY"
 Write-Host "   ELEVENLABS_API_KEY"
 Write-Host "   ELEVENLABS_VOICE_ID"
-Write-Host "4. Launch ClickyClone, choose 'Use a Cloudflare Worker URL', and paste the Worker URL."
+Write-Host "4. Launch Nudge, choose 'Use a Cloudflare Worker URL', and paste the Worker URL."

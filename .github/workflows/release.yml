@@ -37,5 +37,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/release/ClickyCloneSetup.exe
+            artifacts/release/NudgeSetup.exe
             artifacts/release/.env.example
