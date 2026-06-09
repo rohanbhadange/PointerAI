@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PointerAI</title>
+  <meta name="description" content="PointerAI is a voice-guided desktop cursor companion that sees your screen and points to the right control.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="cursor-buddy" aria-hidden="true">
+    <div class="cursor-buddy__tip"></div>
+    <div class="cursor-buddy__pulse"></div>
+  </div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="PointerAI home">
+      <span class="brand-mark"></span>
+      <span>PointerAI</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="#how">How it works</a>
+      <a href="#setup">Setup</a>
+      <a href="#control">Control</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Voice-guided desktop pointing</p>
+        <h1 id="hero-title">Ask where. Watch the cursor buddy point.</h1>
+        <p class="hero-text">
+          PointerAI listens, understands what is on your screen, and moves a lightweight companion to the exact control you asked about.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#setup">Choose setup</a>
+          <a class="button button-secondary" href="#how">See the flow</a>
+        </div>
+      </div>
+
+      <div class="workspace-demo" aria-label="PointerAI product demonstration">
+        <div class="demo-window">
+          <div class="demo-titlebar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <strong>Simulation Controls</strong>
+          </div>
+          <div class="demo-body">
+            <aside class="demo-sidebar">
+              <span class="sidebar-row active"></span>
+              <span class="sidebar-row"></span>
+              <span class="sidebar-row short"></span>
+            </aside>
+            <section class="demo-panel">
+              <div class="mesh-preview">
+                <span class="mesh-node node-a"></span>
+                <span class="mesh-node node-b"></span>
+                <span class="mesh-node node-c"></span>
+              </div>
+              <div class="control-stack">
+                <span class="control-row"></span>
+                <span class="control-row"></span>
+                <button class="demo-control" type="button">Generate mesh</button>
+                <span class="control-row short"></span>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="demo-callout">
+          <span class="callout-dot"></span>
+          <span>"show me generate mesh"</span>
+        </div>
+        <div class="demo-pointer" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <section class="flow-section" id="how" aria-labelledby="flow-title">
+      <div>
+        <p class="eyebrow">The loop</p>
+        <h2 id="flow-title">Built around one fast action.</h2>
+      </div>
+      <div class="flow-grid">
+        <article>
+          <span>01</span>
+          <h3>Speak naturally</h3>
+          <p>Use a short request like "show me solve" or "point to the new tab button."</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Screen context is read</h3>
+          <p>The current screen is sent to your chosen backend, using your own provider keys.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>The buddy moves</h3>
+          <p>The companion lands on the returned target while the app keeps the workflow lightweight.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="setup-section" id="setup" aria-labelledby="setup-title">
+      <div class="section-heading">
+        <p class="eyebrow">Setup paths</p>
+        <h2 id="setup-title">Pick the key setup that fits you.</h2>
+      </div>
+      <div class="setup-options">
+        <article class="setup-option">
+          <span class="option-label">Lowest friction</span>
+          <h3>Local keys</h3>
+          <p>Paste your OpenAI, AssemblyAI, and ElevenLabs keys into the app. PointerAI writes a local env file on your computer.</p>
+        </article>
+        <article class="setup-option">
+          <span class="option-label">Secret isolation</span>
+          <h3>Cloudflare Worker</h3>
+          <p>Deploy your own Worker, store provider keys as Worker secrets, then paste the Worker URL into PointerAI.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="control-section" id="control" aria-labelledby="control-title">
+      <div class="control-copy">
+        <p class="eyebrow">User-owned access</p>
+        <h2 id="control-title">Your keys. Your usage. Your setup.</h2>
+        <p>
+          PointerAI is designed around bring-your-own provider accounts. The app does not require a shared hosted API account, so early users can test without shifting usage costs onto the product owner.
+        </p>
+      </div>
+      <div class="signal-board" aria-hidden="true">
+        <span class="signal-line wide"></span>
+        <span class="signal-line"></span>
+        <span class="signal-line short"></span>
+        <span class="signal-pill">OpenAI computer use</span>
+        <span class="signal-pill">AssemblyAI speech</span>
+        <span class="signal-pill">ElevenLabs voice</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>PointerAI</span>
+    <a href="#top">Back to top</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

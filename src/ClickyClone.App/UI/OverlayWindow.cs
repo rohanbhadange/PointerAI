@@ -19,6 +19,8 @@ public sealed class OverlayWindow : Window
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_LAYERED = 0x00080000;
+    private const double FollowOffsetX = 16;
+    private const double FollowOffsetY = 12;
 
     private readonly System.Drawing.Rectangle screenBounds;
     private readonly double dpiScaleX;
@@ -204,8 +206,8 @@ public sealed class OverlayWindow : Window
         }
 
         cursorPosition = new WpfPoint(
-            (cursor.X - screenBounds.Left) / dpiScaleX + 10,
-            (cursor.Y - screenBounds.Top) / dpiScaleY + 8);
+            (cursor.X - screenBounds.Left) / dpiScaleX + FollowOffsetX,
+            (cursor.Y - screenBounds.Top) / dpiScaleY + FollowOffsetY);
         PositionVisuals();
         UpdateVisualState();
     }

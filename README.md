@@ -109,3 +109,7 @@ To package release artifacts locally:
 ```
 
 Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploads `ClickyCloneSetup.exe`, which the app uses for automatic updates.
+
+## Landing Page
+
+The static product page lives in `landing`. Open `landing\index.html` directly to preview it locally, or publish the folder with GitHub Pages or Cloudflare Pages.
