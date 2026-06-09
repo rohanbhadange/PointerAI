@@ -7,10 +7,10 @@ Windows desktop companion. It runs as a tray-only app, uses `Ctrl+Alt` push-to-t
 Download the latest Windows installer from:
 
 ```text
-https://github.com/rohanbhadange/Nudge/releases/latest/download/NudgeSetup.exe
+https://github.com/rohanbhadange/PointerAI/releases
 ```
 
-The release installer is built as a self-contained Windows app, so users do not need to install the .NET Desktop Runtime separately. After installing, users only need their provider keys for the setup path they choose.
+The release installer is built as a self-contained Windows app, so users do not need to install the .NET Desktop Runtime separately. After installing, users only need their provider keys for the setup path they choose. Once a release includes `NudgeSetup.exe`, you can also link directly to `https://github.com/rohanbhadange/PointerAI/releases/latest/download/NudgeSetup.exe`.
 
 ## Choose One Setup Path
 
@@ -128,8 +128,8 @@ Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploa
 
 ## Landing Page
 
-The static product page lives in `landing`. Open `landing\index.html` directly to preview it locally, or publish the folder with GitHub Pages or Cloudflare Pages. The primary landing page button points to the latest GitHub Release installer:
+The static product page lives in `landing`. Open `landing\index.html` directly to preview it locally, or publish the folder with GitHub Pages or Cloudflare Pages. The primary landing page button points to the GitHub Releases page:
 
 ```text
-https://github.com/rohanbhadange/Nudge/releases/latest/download/NudgeSetup.exe
+https://github.com/rohanbhadange/PointerAI/releases
 ```
