@@ -2,6 +2,16 @@
 
 Windows desktop companion. It runs as a tray-only app, uses `Ctrl+Alt` push-to-talk, sees the screen, speaks responses, and can point the cursor buddy at UI elements.
 
+## Download
+
+Download the latest Windows installer from:
+
+```text
+https://github.com/rohanbhadange/Nudge/releases/latest/download/NudgeSetup.exe
+```
+
+The release installer is built as a self-contained Windows app, so users do not need to install the .NET Desktop Runtime separately. After installing, users only need their provider keys for the setup path they choose.
+
 ## Choose One Setup Path
 
 Nudge can run with local keys on your computer or through your own Cloudflare Worker.
@@ -52,11 +62,17 @@ To check the Worker script setup without deploying:
 
 ## Requirements
 
+For users:
+
 - Windows 10/11
-- .NET SDK 8.0 or newer for building
-- .NET Desktop Runtime 8.0 or newer for running the framework-dependent installer build
 - Provider keys for OpenAI, AssemblyAI, and ElevenLabs
 - Node.js only if using the Cloudflare Worker setup path
+
+For developers:
+
+- .NET SDK 8.0 or newer for building
+- Node.js for Worker checks and Cloudflare Worker setup
+- Inno Setup 6 for compiling the Windows installer
 
 ## Build
 
@@ -82,13 +98,13 @@ Runs live checks against the configured Worker, including `/health`, `/transcrib
 
 ## Installer
 
-Install Inno Setup, then compile:
+The installer includes the published self-contained Windows app. Install Inno Setup, then compile:
 
 ```powershell
 .\scripts\build-installer.ps1
 ```
 
-The installer output is written to `artifacts\installer`.
+The installer output is written to `artifacts\installer\NudgeSetup.exe`.
 
 ## Updates
 
@@ -112,4 +128,8 @@ Tag releases as `v1.0.1`, `v1.1.0`, and so on. The GitHub release workflow uploa
 
 ## Landing Page
 
-The static product page lives in `landing`. Open `landing\index.html` directly to preview it locally, or publish the folder with GitHub Pages or Cloudflare Pages.
+The static product page lives in `landing`. Open `landing\index.html` directly to preview it locally, or publish the folder with GitHub Pages or Cloudflare Pages. The primary landing page button points to the latest GitHub Release installer:
+
+```text
+https://github.com/rohanbhadange/Nudge/releases/latest/download/NudgeSetup.exe
+```

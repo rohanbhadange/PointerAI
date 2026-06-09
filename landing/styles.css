@@ -133,11 +133,18 @@ h3 {
 }
 
 .hero-text,
+.download-note,
 .control-copy p {
   max-width: 560px;
   color: var(--muted);
   font-size: 18px;
   line-height: 1.65;
+}
+
+.download-note {
+  margin-top: 20px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .hero-actions {

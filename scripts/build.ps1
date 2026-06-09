@@ -52,7 +52,7 @@ try {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & $dotnetCommand run --project $testsProjectPath -c Release
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $dotnetCommand publish $projectPath -c $Configuration --self-contained false -o $publishDir
+    & $dotnetCommand publish $projectPath -c $Configuration -r win-x64 --self-contained true -p:PublishSingleFile=false -o $publishDir
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     Write-Host "Published Nudge to $publishDir"
